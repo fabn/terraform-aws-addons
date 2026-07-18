@@ -6,7 +6,8 @@
 # Requires two repository variables (Settings > Secrets and variables >
 # Actions > Variables); the job is skipped until they are configured:
 #   AWS_E2E_ROLE_ARN — IAM role assumed via GitHub OIDC
-#   AWS_E2E_REGION   — target region (defaults to eu-north-1)
+#   AWS_E2E_REGION   — target region (defaults to us-east-1, closest to
+#                      GitHub-hosted runners)
 name: E2E
 
 on:
@@ -44,7 +45,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ vars.AWS_E2E_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_E2E_REGION || 'eu-north-1' }}
+          aws-region: ${{ vars.AWS_E2E_REGION || 'us-east-1' }}
 
       - name: Terraform Init
         run: terraform -chdir=e2e init

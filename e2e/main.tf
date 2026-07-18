@@ -34,6 +34,6 @@ module "addons" {
   production_grade = false
 
   tags = {
-    purpose = "e2e"
+    Component = "e2e"
   }
 }
