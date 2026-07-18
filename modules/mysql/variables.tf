@@ -58,6 +58,34 @@ variable "engine_version" {
   nullable    = true
 }
 
+variable "slow_query_log" {
+  description = "Log queries slower than long_query_time and export them to CloudWatch Logs. Opt out for throwaway environments."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "long_query_time" {
+  description = "Threshold in seconds above which a query is logged as slow (fractions allowed)."
+  type        = number
+  default     = 2
+  nullable    = false
+}
+
+variable "cluster_family" {
+  description = "DB cluster parameter group family, must match engine_version. Only used when slow_query_log is enabled."
+  type        = string
+  default     = "aurora-mysql8.0"
+  nullable    = false
+}
+
+variable "backup_retention_period" {
+  description = "Days of automated backups to retain."
+  type        = number
+  default     = 7
+  nullable    = false
+}
+
 variable "replicas" {
   description = "Number of reader instances alongside the writer. Serverless v2 readers share the cluster's ACU range (size/scaling) but each instance scales independently within it; readers also serve as failover targets."
   type        = number

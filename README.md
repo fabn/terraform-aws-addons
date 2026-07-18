@@ -97,6 +97,10 @@ Readers: `replicas = n` adds reader instances (default 0, writer only).
 Serverless v2 readers share the cluster's ACU range but each instance
 scales independently within it; readers double as failover targets.
 
+Slow queries are logged by default (`long_query_time = 2`s) and exported
+to CloudWatch Logs; opt out with `slow_query_log = false`. Automated
+backups are kept for 7 days (`backup_retention_period`).
+
 #### redis / memcached — ElastiCache node types
 
 | Size | Node type | Memory |

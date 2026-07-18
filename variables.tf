@@ -38,8 +38,9 @@ variable "addons" {
       num_nodes = optional(number, 1)
     }))
     # mysql only.
-    database = optional(string)
-    username = optional(string)
+    database       = optional(string)
+    username       = optional(string)
+    slow_query_log = optional(bool)
     # redis only.
     maxmemory_policy         = optional(string)
     snapshot_retention_limit = optional(number)
@@ -57,8 +58,8 @@ variable "addons" {
   }
 
   validation {
-    condition     = alltrue([for k, spec in var.addons : (spec.scaling == null && spec.database == null && spec.username == null) || k == "mysql"])
-    error_message = "scaling, database and username only apply to the mysql addon."
+    condition     = alltrue([for k, spec in var.addons : (spec.scaling == null && spec.database == null && spec.username == null && spec.slow_query_log == null) || k == "mysql"])
+    error_message = "scaling, database, username and slow_query_log only apply to the mysql addon."
   }
 
   validation {

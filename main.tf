@@ -24,9 +24,10 @@ module "mysql" {
   scaling = local.mysql.scaling
 
   # The default database is named after the stack, not the addon instance.
-  database = coalesce(local.mysql.database, replace(var.name, "-", "_"))
-  username = local.mysql.username
-  replicas = local.mysql.replicas
+  database       = coalesce(local.mysql.database, replace(var.name, "-", "_"))
+  username       = local.mysql.username
+  replicas       = local.mysql.replicas
+  slow_query_log = local.mysql.slow_query_log
 
   vpc_id                     = var.vpc_id
   subnet_ids                 = var.subnet_ids

@@ -74,15 +74,28 @@ module "cluster" {
   cluster_monitoring_interval = var.monitoring_enabled ? 60 : 0
   database_insights_mode      = var.monitoring_enabled ? "standard" : null
 
-  # Explicit params
-  apply_immediately     = true
-  storage_encrypted     = true
-  copy_tags_to_snapshot = true
-  deletion_protection   = var.deletion_protection
-  skip_final_snapshot   = var.skip_final_snapshot
+  # Slow query log: enabled through a dedicated cluster parameter group and
+  # exported to CloudWatch (log group created here so retention is managed).
+  # Only dynamic parameters belong in this group — nothing like
+  # binlog_format, which would keep a scale-to-0 cluster from ever pausing.
+  enabled_cloudwatch_logs_exports = var.slow_query_log ? ["slowquery"] : []
+  create_cloudwatch_log_group     = var.slow_query_log
+  cluster_parameter_group = !var.slow_query_log ? null : {
+    family = var.cluster_family
+    parameters = [
+      { name = "slow_query_log", value = "1" },
+      { name = "long_query_time", value = tostring(var.long_query_time) },
+      { name = "log_output", value = "FILE" },
+    ]
+  }
 
-  # No cluster parameter group on purpose: binlog_format would keep a
-  # scale-to-0 cluster from ever pausing.
+  # Explicit params
+  apply_immediately       = true
+  storage_encrypted       = true
+  copy_tags_to_snapshot   = true
+  backup_retention_period = var.backup_retention_period
+  deletion_protection     = var.deletion_protection
+  skip_final_snapshot     = var.skip_final_snapshot
 
   tags = var.tags
 }

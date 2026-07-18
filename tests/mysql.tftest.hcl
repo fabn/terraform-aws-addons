@@ -139,6 +139,26 @@ run "custom_scaling_replaces_size" {
   }
 }
 
+run "slow_query_log_opt_out" {
+  command = apply
+
+  module {
+    source = "./modules/mysql"
+  }
+
+  variables {
+    name           = "myapp-mysql"
+    slow_query_log = false
+    vpc_id         = "vpc-12345"
+    subnet_ids     = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = can(output.env.MYSQL_HOST)
+    error_message = "opting out of the slow query log should not create the parameter group path"
+  }
+}
+
 run "rejects_size_and_scaling_together" {
   command = plan
 
