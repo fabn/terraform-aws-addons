@@ -39,6 +39,7 @@ output "redis" {
     host              = module.redis[0].host
     reader_host       = module.redis[0].reader_host
     security_group_id = module.redis[0].security_group_id
+    engine            = module.redis[0].engine
     node_type         = module.redis[0].node_type
     replicas          = module.redis[0].replicas
   }

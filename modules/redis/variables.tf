@@ -60,16 +60,30 @@ variable "snapshot_retention_limit" {
   nullable    = false
 }
 
-variable "engine_version" {
-  description = "Redis engine version."
+variable "engine" {
+  description = "Cache engine: `redis` (Redis OSS) or `valkey`, the Redis-compatible engine ElastiCache offers at a lower price. Valkey speaks the same protocol, so `REDIS_URL` and clients keep working unchanged."
   type        = string
-  default     = "7.1"
+  default     = "redis"
+  nullable    = false
+
+  validation {
+    condition     = contains(["redis", "valkey"], var.engine)
+    error_message = "engine must be one of: redis, valkey."
+  }
+}
+
+variable "engine_version" {
+  description = "Engine version. Defaults to the engine's current major when null (7.1 for redis, 8.0 for valkey)."
+  type        = string
+  default     = null
+  nullable    = true
 }
 
 variable "parameter_group_family" {
-  description = "ElastiCache parameter group family, must match engine_version."
+  description = "ElastiCache parameter group family, must match engine_version. Defaults to the engine's current family when null (redis7 for redis, valkey8 for valkey)."
   type        = string
-  default     = "redis7"
+  default     = null
+  nullable    = true
 }
 
 variable "parameters" {

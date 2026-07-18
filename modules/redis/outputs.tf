@@ -29,6 +29,16 @@ output "security_group_id" {
   value       = module.redis.security_group_id
 }
 
+output "engine" {
+  description = "Cache engine backing the replication group (redis or valkey)."
+  value       = var.engine
+}
+
+output "parameter_group_family" {
+  description = "Resolved parameter group family (from `engine` or an override)."
+  value       = local.parameter_group_family
+}
+
 output "node_type" {
   description = "Resolved cache node type (from `size` or `node`)."
   value       = local.node_type

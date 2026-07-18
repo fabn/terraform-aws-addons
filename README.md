@@ -133,12 +133,32 @@ enables automatic failover — a replica is promoted and the primary endpoint
 DNS follows, no sentinel-aware client needed. Add `multi_az_enabled = true`
 (submodule) for AZ-spread placement.
 
+#### Redis: engine (redis vs valkey)
+
+ElastiCache offers [Valkey](https://valkey.io) — the Redis-compatible fork —
+at a lower price than Redis OSS for the same node types. It speaks the same
+protocol, so the addon contract does not change: `REDIS_URL` and existing
+clients (redis-rb, Sidekiq, …) keep working unchanged. Redis OSS stays the
+default; opt into Valkey per addon:
+
+```hcl
+redis = {
+  size   = "small"
+  engine = "valkey" # redis (default) | valkey
+}
+```
+
+Switching the engine also switches the parameter group family default
+(`redis7` → `valkey8`); `engine_version` and `parameter_group_family` are
+still overridable on the submodule (e.g. `engine = "valkey"` with
+`parameter_group_family = "valkey7"`).
+
 ### Addons
 
 | Addon | Backed by | env | sensitive_env |
 |-----------|-----------|-----|---------------|
 | mysql | Aurora MySQL Serverless v2 ([terraform-aws-modules/rds-aurora](https://github.com/terraform-aws-modules/terraform-aws-rds-aurora)) | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_DATABASE` | `DATABASE_URL` (mysql2 scheme), `MYSQL_PASSWORD` |
-| redis | ElastiCache Redis ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `REDIS_URL` | — |
+| redis | ElastiCache Redis / Valkey ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `REDIS_URL` | — |
 | memcached | ElastiCache Memcached ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `MEMCACHED_SERVER_URL` | — |
 
 ## Examples
