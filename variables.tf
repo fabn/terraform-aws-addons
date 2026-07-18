@@ -1,5 +1,5 @@
 variable "name" {
-  description = "Stack name (e.g. `myapp-staging`). Addon resources are named `<name>-<addon>`; the default MySQL database is named after the stack."
+  description = "Stack name (e.g. `myapp-staging`). Addon resources are named `<name>-<addon>`; the default SQL database (mysql/postgres) is named after the stack."
   type        = string
 
   validation {
@@ -17,16 +17,16 @@ variable "name" {
 #
 # `size` picks a preset plan (mini, small, medium, large — mini being the
 # default); custom computational resources go in the addon-specific
-# attribute instead (`scaling` for mysql ACU ranges, `node` for
+# attribute instead (`scaling` for mysql/postgres ACU ranges, `node` for
 # redis/memcached node type/count). Per-addon knobs beyond sizing live on
 # the submodules, meant to be used directly for those cases.
 variable "addons" {
-  description = "Map of addon name => addon spec. Supported addons: mysql, redis, memcached."
+  description = "Map of addon name => addon spec. Supported addons: mysql, postgres, redis, memcached."
   type = map(object({
     size = optional(string)
-    # mysql/redis only: reader/replica instances alongside the writer/primary.
+    # mysql/postgres/redis only: reader/replica instances alongside the writer/primary.
     replicas = optional(number)
-    # mysql only: custom Serverless v2 capacity range.
+    # mysql/postgres only: custom Serverless v2 capacity range.
     scaling = optional(object({
       min_capacity             = number
       max_capacity             = number
@@ -37,7 +37,7 @@ variable "addons" {
       node_type = string
       num_nodes = optional(number, 1)
     }))
-    # mysql only.
+    # mysql/postgres only.
     database       = optional(string)
     username       = optional(string)
     slow_query_log = optional(bool)
@@ -49,8 +49,8 @@ variable "addons" {
   default = {}
 
   validation {
-    condition     = alltrue([for k, spec in var.addons : contains(["mysql", "redis", "memcached"], k)])
-    error_message = "Supported addons are: mysql, redis, memcached."
+    condition     = alltrue([for k, spec in var.addons : contains(["mysql", "postgres", "redis", "memcached"], k)])
+    error_message = "Supported addons are: mysql, postgres, redis, memcached."
   }
 
   validation {
@@ -59,8 +59,8 @@ variable "addons" {
   }
 
   validation {
-    condition     = alltrue([for k, spec in var.addons : (spec.scaling == null && spec.database == null && spec.username == null && spec.slow_query_log == null) || k == "mysql"])
-    error_message = "scaling, database, username and slow_query_log only apply to the mysql addon."
+    condition     = alltrue([for k, spec in var.addons : (spec.scaling == null && spec.database == null && spec.username == null && spec.slow_query_log == null) || contains(["mysql", "postgres"], k)])
+    error_message = "scaling, database, username and slow_query_log only apply to the mysql and postgres addons."
   }
 
   validation {
@@ -69,8 +69,8 @@ variable "addons" {
   }
 
   validation {
-    condition     = alltrue([for k, spec in var.addons : spec.replicas == null || k == "mysql" || k == "redis"])
-    error_message = "replicas only applies to the mysql and redis addons."
+    condition     = alltrue([for k, spec in var.addons : spec.replicas == null || contains(["mysql", "postgres", "redis"], k)])
+    error_message = "replicas only applies to the mysql, postgres and redis addons."
   }
 
   validation {
@@ -107,7 +107,7 @@ variable "allowed_security_group_ids" {
 }
 
 variable "production_grade" {
-  description = "Production lifecycle for stateful addons: monitoring, deletion protection and final snapshot on MySQL. Disable for ephemeral environments (review apps, e2e)."
+  description = "Production lifecycle for stateful addons: monitoring, deletion protection and final snapshot on the mysql/postgres clusters. Disable for ephemeral environments (review apps, e2e)."
   type        = bool
   default     = true
 }

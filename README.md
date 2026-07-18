@@ -77,10 +77,14 @@ module "mysql" {
 
 Each addon accepts a Heroku-style `size` preset. The variable is nullable:
 set `size = null` and pass the addon-specific resources variable instead
-(`scaling` for mysql, `node` for redis/memcached) when the presets don't
-fit.
+(`scaling` for mysql/postgres, `node` for redis/memcached) when the presets
+don't fit.
 
-#### mysql — Aurora MySQL Serverless v2 (ACU ranges, 1 ACU = 2 GiB RAM)
+#### mysql / postgres — Aurora Serverless v2 (ACU ranges, 1 ACU = 2 GiB RAM)
+
+Both SQL addons share the same presets, the same `scaling` escape hatch and
+the same contract — a stack picks either database interchangeably (they both
+expose `DATABASE_URL`).
 
 | Size | Min ACU | Max ACU | Scales to zero |
 |--------|---------|---------|------------------|
@@ -91,15 +95,17 @@ fit.
 
 Custom capacity: `size = null` +
 `scaling = { min_capacity = 0, max_capacity = 16, seconds_until_auto_pause = 600 }`
-(scale-to-zero requires `min_capacity = 0` and Aurora MySQL >= 3.08).
+(scale-to-zero requires `min_capacity = 0` and Aurora MySQL >= 3.08 /
+Aurora PostgreSQL >= 15.4).
 
 Readers: `replicas = n` adds reader instances (default 0, writer only).
 Serverless v2 readers share the cluster's ACU range but each instance
 scales independently within it; readers double as failover targets.
 
 Slow queries are logged by default (`long_query_time = 2`s) and exported
-to CloudWatch Logs; opt out with `slow_query_log = false`. Automated
-backups are kept for 7 days (`backup_retention_period`).
+to CloudWatch Logs; opt out with `slow_query_log = false`. mysql uses the
+slow query log, postgres the equivalent `log_min_duration_statement`.
+Automated backups are kept for 7 days (`backup_retention_period`).
 
 #### redis / memcached — ElastiCache node types
 
@@ -158,6 +164,7 @@ still overridable on the submodule (e.g. `engine = "valkey"` with
 | Addon | Backed by | env | sensitive_env |
 |-----------|-----------|-----|---------------|
 | mysql | Aurora MySQL Serverless v2 ([terraform-aws-modules/rds-aurora](https://github.com/terraform-aws-modules/terraform-aws-rds-aurora)) | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_DATABASE` | `DATABASE_URL` (mysql2 scheme), `MYSQL_PASSWORD` |
+| postgres | Aurora PostgreSQL Serverless v2 ([terraform-aws-modules/rds-aurora](https://github.com/terraform-aws-modules/terraform-aws-rds-aurora)) | `PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE` | `DATABASE_URL` (postgresql scheme), `PGPASSWORD` |
 | redis | ElastiCache Redis / Valkey ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `REDIS_URL` | — |
 | memcached | ElastiCache Memcached ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `MEMCACHED_SERVER_URL` | — |
 
@@ -167,6 +174,8 @@ still overridable on the submodule (e.g. `engine = "valkey"` with
   addons map
 - [examples/mysql](examples/mysql) — standalone submodule with custom
   Serverless v2 capacity
+- [examples/postgres](examples/postgres) — standalone postgres submodule
+  with custom Serverless v2 capacity
 
 ## Requirements
 
