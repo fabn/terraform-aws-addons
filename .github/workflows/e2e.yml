@@ -1,7 +1,8 @@
 # E2E suite: real AWS apply + destroy of the full addon stack (~25 minutes,
-# Aurora dominates). Deliberately NOT part of the PR feedback loop — it runs
-# on pushes to main that touch terraform code, and on demand before cutting
-# a release.
+# Aurora dominates). Deliberately NOT part of the PR feedback loop — the
+# mocked unit tests (test.yml) gate the contract on every push. This real-AWS
+# run is decoupled from merge frequency: it runs on a weekly schedule (to
+# catch AWS/provider drift) and on demand before cutting a release.
 #
 # Requires two repository variables (Settings > Secrets and variables >
 # Actions > Variables); the job is skipped until they are configured:
@@ -11,13 +12,10 @@
 name: E2E
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '**/*.tf'
-      - 'e2e/**'
-      - '.github/workflows/e2e.yml'
   workflow_dispatch:
+  schedule:
+    # Weekly, Monday 06:00 UTC.
+    - cron: '0 6 * * 1'
 
 # One e2e run at a time: the harness provisions fixed-name resources.
 concurrency:
