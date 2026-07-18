@@ -16,9 +16,9 @@ each addon is an independent submodule under `modules/` that outputs `env`
 the caller, Heroku-addon style. New backing services are new addon modules,
 never new toggles in an existing one.
 
-The root module is currently a no-op placeholder that validates the
-repository structure, CI and registry publishing; the first addons will land
-under `modules/`.
+The root module is a formation-style wrapper: a single `addons` map (one
+entry per backing service, Heroku-like `size` presets) that deploys the
+matching submodules and merges their env outputs.
 
 ## Contribution Conventions
 
@@ -56,7 +56,11 @@ terraform validate
 terraform test
 
 # Run specific test
-terraform test -filter=tests/placeholder.tftest.hcl
+terraform test -filter=tests/mysql.tftest.hcl
+
+# Run E2E tests (real AWS account, applies and destroys, ~25 minutes)
+terraform -chdir=e2e init
+terraform -chdir=e2e test
 ```
 
 ### Git Hooks (Lefthook)
@@ -78,14 +82,22 @@ lefthook run validate-all
 
 ```
 .
-├── main.tf              # Placeholder root module (no-op scaffold)
-├── variables.tf         # Input variables
-├── outputs.tf           # Output values
-├── versions.tf          # Provider requirements (aws ~> 6.0)
+├── main.tf              # Root wrapper: addons map => submodule instances
+├── variables.tf         # Input variables (addons map + shared network/lifecycle)
+├── outputs.tf           # Merged env/sensitive_env + per-addon details
+├── versions.tf          # Provider requirements (aws >= 6.54, random ~> 3.6)
 │
-├── modules/             # Addon submodules (to come)
+├── modules/             # Addon submodules
+│   ├── mysql/           # Aurora MySQL Serverless v2 (terraform-aws-modules/rds-aurora)
+│   ├── redis/           # ElastiCache Redis (terraform-aws-modules/elasticache)
+│   └── memcached/       # ElastiCache Memcached (terraform-aws-modules/elasticache)
 │
-└── tests/               # Unit tests (mocked providers)
+├── examples/            # Usage examples
+│   ├── stack/           # Root wrapper, formation-style addons map
+│   └── mysql/           # Standalone submodule with custom scaling
+│
+├── tests/               # Unit tests (mocked providers)
+└── e2e/                 # E2E harness + tests (real AWS account)
 ```
 
 ### Key Design Decisions
@@ -96,19 +108,37 @@ lefthook run validate-all
 - **Addons are separate modules, not core toggles**: addons have different
   lifecycles; per-environment addon swaps stay invisible to the rest of the
   stack.
-- **Unit tests use `mock_provider`**: no AWS account or credentials needed in
-  CI.
+- **Built on the official terraform-aws-modules**: `rds-aurora` and
+  `elasticache`, for a uniform syntax across addons — this repo only adds
+  the addon contract, the sizes and opinionated defaults on top.
+- **Heroku-style sizes**: every addon takes a nullable `size` preset
+  (mini/small/medium/large); `size = null` + the addon-specific variable
+  (`scaling` for mysql ACU ranges, `node` for cache node type/count) is the
+  escape hatch for custom capacity. Exactly one of the two must be set
+  (enforced by cross-variable validation).
+- **MySQL scales to zero**: Serverless v2 with `min_capacity = 0` +
+  auto-pause on the mini/small sizes; no `cluster_parameters` on purpose
+  (binlog_format would keep the cluster from pausing).
+- **Unit tests use `mock_provider`**: no AWS account or credentials needed
+  in CI; endpoints are mock values so assertions target contract shape and
+  size resolution, not concrete hostnames.
 
 ## Testing
 
 - `tests/` — unit tests with `mock_provider`, no AWS account needed.
   Assertions on planned values (naming, validation rules, addon env
-  contracts).
+  contracts, size resolution).
+- `e2e/` — a root module provisioning the full stack (mini sizes, ephemeral
+  lifecycle) in the default VPC of a real AWS account; `terraform test`
+  applies, asserts real endpoints and destroys. Runs from
+  `.github/workflows/e2e.yml` on pushes to main / manual dispatch, skipped
+  until the `AWS_E2E_ROLE_ARN` repository variable (GitHub OIDC) is set.
 
 ## CI/CD
 
 - **GitHub Actions** — fmt/validate + unit tests (`test.yml`,
-  `terraform-check.yml`), actionlint (`actionlint.yml`)
+  `terraform-check.yml`), actionlint (`actionlint.yml`), e2e on main/dispatch
+  (`e2e.yml`)
 - **Release Drafter** (v7) — automatic release notes generation; registry
   releases are git tags (`v*`)
 - **Dependabot** — dependency updates (github-actions + terraform)

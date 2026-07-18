@@ -8,12 +8,6 @@ instead of in-cluster workloads.
 Published on the Terraform Registry as
 [`fabn/addons/aws`](https://registry.terraform.io/modules/fabn/addons/aws).
 
-## Status
-
-**Scaffolding.** The root module is a no-op placeholder used to validate the
-repository structure, the CI pipeline and registry publishing. The first
-addon modules will land under `modules/` next.
-
 ## Design
 
 Addons follow the same uniform contract as the in-cluster addons of the
@@ -27,23 +21,140 @@ The caller merges both into the stack (`env` / `secret_env` of the formation
 module), Heroku-addon style. New backing services are new addon modules,
 never new toggles in an existing one.
 
+## Usage
+
+### Root wrapper (formation-style)
+
+The root module wraps the submodules behind a single Heroku-like `addons`
+map — one entry per backing service, sized with a preset plan:
+
 ```hcl
-module "app" {
-  source  = "fabn/formation/kubernetes"
+module "addons" {
+  source  = "fabn/addons/aws"
   version = "~> 0.1"
 
+  name = "myapp-staging"
+
+  addons = {
+    mysql     = { size = "medium" }
+    redis     = { size = "mini" }
+    memcached = { size = "mini" }
+  }
+
+  vpc_id                     = var.vpc_id
+  subnet_ids                 = var.private_subnet_ids
+  allowed_security_group_ids = [var.eks_node_security_group_id]
+}
+
+module "app" {
+  source  = "fabn/formation/kubernetes"
+  version = "~> 0.7"
+
   # ...
-  env        = merge(module.some_aws_addon.env, { RAILS_ENV = "production" })
-  secret_env = module.some_aws_addon.sensitive_env
+  env        = merge(module.addons.env, { RAILS_ENV = "production" })
+  secret_env = module.addons.sensitive_env
 }
 ```
+
+### Individual submodules
+
+Every addon stays usable on its own (and exposes more knobs than the
+wrapper):
+
+```hcl
+module "mysql" {
+  source  = "fabn/addons/aws//modules/mysql"
+  version = "~> 0.1"
+
+  name       = "myapp-staging-mysql"
+  size       = "small"
+  vpc_id     = var.vpc_id
+  subnet_ids = var.private_subnet_ids
+}
+```
+
+### Sizes
+
+Each addon accepts a Heroku-style `size` preset. The variable is nullable:
+set `size = null` and pass the addon-specific resources variable instead
+(`scaling` for mysql, `node` for redis/memcached) when the presets don't
+fit.
+
+#### mysql — Aurora MySQL Serverless v2 (ACU ranges, 1 ACU = 2 GiB RAM)
+
+| Size | Min ACU | Max ACU | Scales to zero |
+|--------|---------|---------|------------------|
+| mini | 0 | 1 | after 5 min idle |
+| small | 0 | 2 | after 5 min idle |
+| medium | 0.5 | 4 | no (warm floor) |
+| large | 1 | 8 | no (warm floor) |
+
+Custom capacity: `size = null` +
+`scaling = { min_capacity = 0, max_capacity = 16, seconds_until_auto_pause = 600 }`
+(scale-to-zero requires `min_capacity = 0` and Aurora MySQL >= 3.08).
+
+Readers: `replicas = n` adds reader instances (default 0, writer only).
+Serverless v2 readers share the cluster's ACU range but each instance
+scales independently within it; readers double as failover targets.
+
+Slow queries are logged by default (`long_query_time = 2`s) and exported
+to CloudWatch Logs; opt out with `slow_query_log = false`. Automated
+backups are kept for 7 days (`backup_retention_period`).
+
+#### redis / memcached — ElastiCache node types
+
+| Size | Node type | Memory |
+|--------|------------------|----------|
+| mini | cache.t4g.micro | ~0.5 GiB |
+| small | cache.t4g.small | ~1.4 GiB |
+| medium | cache.t4g.medium | ~3.1 GiB |
+| large | cache.m7g.large | ~6.4 GiB |
+
+Custom nodes: `size = null` + `node = { node_type = "cache.r7g.xlarge" }`
+(redis; add `num_nodes` for multi-node memcached).
+
+#### Redis: queue vs cache posture
+
+The redis defaults suit a queue backend (Sidekiq): `maxmemory_policy =
+"noeviction"` and one day of RDB snapshots. When Redis is a cache, flip
+both:
+
+```hcl
+redis = {
+  size                     = "small"
+  maxmemory_policy         = "allkeys-lru"
+  snapshot_retention_limit = 0 # opt out of persistence
+  replicas                 = 1 # optional HA
+}
+```
+
+There is no Redis Sentinel on ElastiCache: with `replicas > 0` the addon
+enables automatic failover — a replica is promoted and the primary endpoint
+DNS follows, no sentinel-aware client needed. Add `multi_az_enabled = true`
+(submodule) for AZ-spread placement.
+
+### Addons
+
+| Addon | Backed by | env | sensitive_env |
+|-----------|-----------|-----|---------------|
+| mysql | Aurora MySQL Serverless v2 ([terraform-aws-modules/rds-aurora](https://github.com/terraform-aws-modules/terraform-aws-rds-aurora)) | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_DATABASE` | `DATABASE_URL` (mysql2 scheme), `MYSQL_PASSWORD` |
+| redis | ElastiCache Redis ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `REDIS_URL` | — |
+| memcached | ElastiCache Memcached ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `MEMCACHED_SERVER_URL` | — |
+
+## Examples
+
+- [examples/stack](examples/stack) — root wrapper with the formation-style
+  addons map
+- [examples/mysql](examples/mysql) — standalone submodule with custom
+  Serverless v2 capacity
 
 ## Requirements
 
 | Name | Version |
 |------|---------|
-| terraform | >= 1.9 |
-| aws | ~> 6.0 |
+| terraform | >= 1.11.1 |
+| aws | >= 6.54, < 7.0 |
+| random | ~> 3.6 |
 
 ## Development
 
@@ -61,6 +172,20 @@ Unit tests run against mocked providers, no AWS account needed:
 
 ```bash
 terraform init && terraform test
+```
+
+### E2E
+
+The e2e suite provisions the full stack (mini sizes) on a real AWS account
+and destroys it afterwards (~25 minutes, Aurora dominates — a few cents per
+run). It is not part of the PR feedback loop: it runs on pushes to `main`
+and on demand (`workflow_dispatch`) before cutting a release, and stays
+skipped until the `AWS_E2E_ROLE_ARN` / `AWS_E2E_REGION` repository
+variables (GitHub OIDC) are configured.
+
+```bash
+terraform -chdir=e2e init
+terraform -chdir=e2e test
 ```
 
 ### Validation
