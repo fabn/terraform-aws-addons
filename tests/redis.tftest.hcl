@@ -255,3 +255,59 @@ run "rejects_multi_az_without_replicas" {
 
   expect_failures = [var.multi_az_enabled]
 }
+
+run "maintenance_window_defaults_to_a_nighttime_slot" {
+  command = apply
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name       = "myapp-redis"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.maintenance_window == "mon:03:00-mon:04:00"
+    error_message = "maintenance should default to a Monday-night UTC window"
+  }
+}
+
+run "maintenance_window_can_be_overridden_or_disabled" {
+  command = apply
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name               = "myapp-redis"
+    maintenance_window = null
+    vpc_id             = "vpc-12345"
+    subnet_ids         = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.maintenance_window == null
+    error_message = "a null maintenance window should pass through (AWS picks a random one)"
+  }
+}
+
+run "rejects_malformed_maintenance_window" {
+  command = plan
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name               = "myapp-redis"
+    maintenance_window = "monday night"
+    vpc_id             = "vpc-12345"
+    subnet_ids         = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.maintenance_window]
+}

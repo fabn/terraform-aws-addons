@@ -218,3 +218,87 @@ run "rejects_auto_pause_with_warm_floor" {
 
   expect_failures = [var.scaling]
 }
+
+run "maintenance_windows_default_to_a_nighttime_slot" {
+  command = apply
+
+  module {
+    source = "./modules/mysql"
+  }
+
+  variables {
+    name       = "myapp-mysql"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.preferred_maintenance_window == "mon:03:00-mon:04:00"
+    error_message = "maintenance should default to a Monday-night UTC window"
+  }
+
+  assert {
+    condition     = output.preferred_backup_window == "01:00-02:00"
+    error_message = "backups should default to a nighttime UTC window that precedes maintenance"
+  }
+}
+
+run "maintenance_windows_can_be_overridden_or_disabled" {
+  command = apply
+
+  module {
+    source = "./modules/mysql"
+  }
+
+  variables {
+    name                         = "myapp-mysql"
+    preferred_maintenance_window = "sun:23:00-mon:00:00"
+    preferred_backup_window      = null
+    vpc_id                       = "vpc-12345"
+    subnet_ids                   = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.preferred_maintenance_window == "sun:23:00-mon:00:00"
+    error_message = "an explicit maintenance window should pass through untouched"
+  }
+
+  assert {
+    condition     = output.preferred_backup_window == null
+    error_message = "a null backup window should pass through (AWS picks a random one)"
+  }
+}
+
+run "rejects_malformed_maintenance_window" {
+  command = plan
+
+  module {
+    source = "./modules/mysql"
+  }
+
+  variables {
+    name                         = "myapp-mysql"
+    preferred_maintenance_window = "monday night"
+    vpc_id                       = "vpc-12345"
+    subnet_ids                   = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.preferred_maintenance_window]
+}
+
+run "rejects_malformed_backup_window" {
+  command = plan
+
+  module {
+    source = "./modules/mysql"
+  }
+
+  variables {
+    name                    = "myapp-mysql"
+    preferred_backup_window = "mon:01:00-mon:02:00"
+    vpc_id                  = "vpc-12345"
+    subnet_ids              = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.preferred_backup_window]
+}

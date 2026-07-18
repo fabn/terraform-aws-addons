@@ -76,6 +76,9 @@ module "redis" {
   # Persistence = daily RDB snapshots; 0 disables them entirely.
   snapshot_retention_limit = var.snapshot_retention_limit
 
+  # Weekly maintenance window (UTC); null lets AWS pick a random window.
+  maintenance_window = var.maintenance_window
+
   apply_immediately = true
 
   # Network: subnet group on private subnets, dedicated security group with

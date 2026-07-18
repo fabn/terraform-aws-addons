@@ -260,3 +260,81 @@ run "rejects_mysql_attributes_on_cache_addons" {
 
   expect_failures = [var.addons]
 }
+
+run "shared_maintenance_window_applies_to_every_addon" {
+  command = apply
+
+  variables {
+    name             = "myapp"
+    production_grade = false
+    vpc_id           = "vpc-12345"
+    subnet_ids       = ["subnet-1", "subnet-2"]
+    addons = {
+      mysql     = { size = "mini" }
+      postgres  = { size = "mini" }
+      redis     = { size = "mini" }
+      memcached = { size = "mini" }
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      output.mysql.preferred_maintenance_window == "mon:03:00-mon:04:00",
+      output.postgres.preferred_maintenance_window == "mon:03:00-mon:04:00",
+      output.redis.maintenance_window == "mon:03:00-mon:04:00",
+      output.memcached.maintenance_window == "mon:03:00-mon:04:00",
+    ])
+    error_message = "the shared maintenance window default should reach every addon"
+  }
+
+  assert {
+    condition = alltrue([
+      output.mysql.preferred_backup_window == "01:00-02:00",
+      output.postgres.preferred_backup_window == "01:00-02:00",
+    ])
+    error_message = "the shared backup window default should reach the SQL addons"
+  }
+}
+
+run "shared_windows_can_be_overridden_or_disabled" {
+  command = apply
+
+  variables {
+    name               = "myapp"
+    production_grade   = false
+    maintenance_window = "sun:23:00-mon:01:00"
+    backup_window      = null
+    vpc_id             = "vpc-12345"
+    subnet_ids         = ["subnet-1", "subnet-2"]
+    addons = {
+      mysql = { size = "mini" }
+      redis = { size = "mini" }
+    }
+  }
+
+  assert {
+    condition     = output.mysql.preferred_maintenance_window == "sun:23:00-mon:01:00" && output.redis.maintenance_window == "sun:23:00-mon:01:00"
+    error_message = "an explicit maintenance window should reach every addon"
+  }
+
+  assert {
+    condition     = output.mysql.preferred_backup_window == null
+    error_message = "a null backup window should pass through to the SQL addons"
+  }
+}
+
+run "rejects_malformed_shared_maintenance_window" {
+  command = plan
+
+  variables {
+    name               = "myapp"
+    maintenance_window = "monday night"
+    vpc_id             = "vpc-12345"
+    subnet_ids         = ["subnet-1", "subnet-2"]
+    addons = {
+      redis = { size = "mini" }
+    }
+  }
+
+  expect_failures = [var.maintenance_window]
+}

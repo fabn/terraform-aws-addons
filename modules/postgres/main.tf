@@ -99,5 +99,9 @@ module "cluster" {
   deletion_protection     = var.deletion_protection
   skip_final_snapshot     = var.skip_final_snapshot
 
+  # Maintenance/backup windows (UTC); null lets AWS pick a random window.
+  preferred_maintenance_window = var.preferred_maintenance_window
+  preferred_backup_window      = var.preferred_backup_window
+
   tags = var.tags
 }

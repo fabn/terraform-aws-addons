@@ -41,6 +41,9 @@ module "memcached" {
   # Plain memcached protocol: standard clients don't speak TLS.
   transit_encryption_enabled = false
 
+  # Weekly maintenance window (UTC); null lets AWS pick a random window.
+  maintenance_window = var.maintenance_window
+
   apply_immediately = true
 
   # Network: subnet group on private subnets, dedicated security group with
