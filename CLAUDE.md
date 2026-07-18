@@ -89,12 +89,14 @@ lefthook run validate-all
 │
 ├── modules/             # Addon submodules
 │   ├── mysql/           # Aurora MySQL Serverless v2 (terraform-aws-modules/rds-aurora)
+│   ├── postgres/        # Aurora PostgreSQL Serverless v2 (terraform-aws-modules/rds-aurora)
 │   ├── redis/           # ElastiCache Redis (terraform-aws-modules/elasticache)
 │   └── memcached/       # ElastiCache Memcached (terraform-aws-modules/elasticache)
 │
 ├── examples/            # Usage examples
 │   ├── stack/           # Root wrapper, formation-style addons map
-│   └── mysql/           # Standalone submodule with custom scaling
+│   ├── mysql/           # Standalone submodule with custom scaling
+│   └── postgres/        # Standalone postgres submodule with custom scaling
 │
 ├── tests/               # Unit tests (mocked providers)
 └── e2e/                 # E2E harness + tests (real AWS account)
@@ -113,12 +115,16 @@ lefthook run validate-all
   the addon contract, the sizes and opinionated defaults on top.
 - **Heroku-style sizes**: every addon takes a nullable `size` preset
   (mini/small/medium/large); `size = null` + the addon-specific variable
-  (`scaling` for mysql ACU ranges, `node` for cache node type/count) is the
-  escape hatch for custom capacity. Exactly one of the two must be set
+  (`scaling` for mysql/postgres ACU ranges, `node` for cache node type/count)
+  is the escape hatch for custom capacity. Exactly one of the two must be set
   (enforced by cross-variable validation).
-- **MySQL scales to zero**: Serverless v2 with `min_capacity = 0` +
-  auto-pause on the mini/small sizes; no `cluster_parameters` on purpose
-  (binlog_format would keep the cluster from pausing).
+- **mysql/postgres are interchangeable siblings**: same rds-aurora base,
+  same sizes/scaling, both export `DATABASE_URL` — a stack picks one SQL
+  database. Aligned with the formation module's in-cluster addons.
+- **SQL scales to zero**: Serverless v2 with `min_capacity = 0` +
+  auto-pause on the mini/small sizes; slow query logging goes through a
+  dedicated cluster parameter group (dynamic parameters only — nothing like
+  mysql's binlog_format that would keep the cluster from pausing).
 - **Unit tests use `mock_provider`**: no AWS account or credentials needed
   in CI; endpoints are mock values so assertions target contract shape and
   size resolution, not concrete hostnames.

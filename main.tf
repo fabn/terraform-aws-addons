@@ -9,6 +9,7 @@
 
 locals {
   mysql     = lookup(var.addons, "mysql", null)
+  postgres  = lookup(var.addons, "postgres", null)
   redis     = lookup(var.addons, "redis", null)
   memcached = lookup(var.addons, "memcached", null)
 }
@@ -28,6 +29,34 @@ module "mysql" {
   username       = local.mysql.username
   replicas       = local.mysql.replicas
   slow_query_log = local.mysql.slow_query_log
+
+  vpc_id                     = var.vpc_id
+  subnet_ids                 = var.subnet_ids
+  allowed_cidr_blocks        = var.allowed_cidr_blocks
+  allowed_security_group_ids = var.allowed_security_group_ids
+
+  monitoring_enabled  = var.production_grade
+  deletion_protection = var.production_grade
+  skip_final_snapshot = !var.production_grade
+
+  tags = var.tags
+}
+
+module "postgres" {
+  count  = local.postgres != null ? 1 : 0
+  source = "./modules/postgres"
+
+  name = "${var.name}-postgres"
+  # Custom resources win over the preset; entries with neither get the
+  # smallest plan, Heroku-style.
+  size    = local.postgres.scaling != null ? null : coalesce(local.postgres.size, "mini")
+  scaling = local.postgres.scaling
+
+  # The default database is named after the stack, not the addon instance.
+  database       = coalesce(local.postgres.database, replace(var.name, "-", "_"))
+  username       = local.postgres.username
+  replicas       = local.postgres.replicas
+  slow_query_log = local.postgres.slow_query_log
 
   vpc_id                     = var.vpc_id
   subnet_ids                 = var.subnet_ids

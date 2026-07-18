@@ -98,6 +98,45 @@ run "defaults_to_mini_and_supports_custom_resources" {
   }
 }
 
+run "deploys_postgres_addon" {
+  command = apply
+
+  variables {
+    name             = "myapp-staging"
+    production_grade = false
+    vpc_id           = "vpc-12345"
+    subnet_ids       = ["subnet-1", "subnet-2"]
+    addons = {
+      postgres = { size = "medium" }
+    }
+  }
+
+  assert {
+    condition     = can(output.env.PGHOST) && output.env.PGPORT == "5432"
+    error_message = "merged env should contain the postgres connection vars"
+  }
+
+  assert {
+    condition     = output.env.PGDATABASE == "myapp_staging"
+    error_message = "default postgres database should be named after the stack"
+  }
+
+  assert {
+    condition     = startswith(output.sensitive_env.DATABASE_URL, "postgresql://app:")
+    error_message = "merged sensitive_env should contain the postgres DATABASE_URL"
+  }
+
+  assert {
+    condition     = output.postgres.scaling.min_capacity == 0.5 && output.postgres.scaling.max_capacity == 4
+    error_message = "postgres size=medium should resolve to the 0.5-4 ACU range"
+  }
+
+  assert {
+    condition     = output.mysql == null
+    error_message = "disabled addons should output null details"
+  }
+}
+
 run "redis_defaults_to_redis_engine" {
   command = apply
 
@@ -182,7 +221,7 @@ run "rejects_unknown_addon" {
     vpc_id     = "vpc-12345"
     subnet_ids = ["subnet-1", "subnet-2"]
     addons = {
-      postgres = { size = "mini" }
+      elasticsearch = { size = "mini" }
     }
   }
 

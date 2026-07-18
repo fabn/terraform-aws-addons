@@ -5,6 +5,7 @@ output "env" {
   description = "Merged plaintext config vars of every enabled addon."
   value = merge(
     try(module.mysql[0].env, {}),
+    try(module.postgres[0].env, {}),
     try(module.redis[0].env, {}),
     try(module.memcached[0].env, {}),
   )
@@ -15,6 +16,7 @@ output "sensitive_env" {
   sensitive   = true
   value = merge(
     try(module.mysql[0].sensitive_env, {}),
+    try(module.postgres[0].sensitive_env, {}),
     try(module.redis[0].sensitive_env, {}),
     try(module.memcached[0].sensitive_env, {}),
   )
@@ -30,6 +32,19 @@ output "mysql" {
     cluster_identifier = module.mysql[0].cluster_identifier
     security_group_id  = module.mysql[0].security_group_id
     scaling            = module.mysql[0].scaling
+  }
+}
+
+output "postgres" {
+  description = "PostgreSQL addon connection details; null when the addon is not enabled."
+  value = local.postgres == null ? null : {
+    host               = module.postgres[0].host
+    reader_host        = module.postgres[0].reader_host
+    database           = module.postgres[0].database
+    username           = module.postgres[0].username
+    cluster_identifier = module.postgres[0].cluster_identifier
+    security_group_id  = module.postgres[0].security_group_id
+    scaling            = module.postgres[0].scaling
   }
 }
 
