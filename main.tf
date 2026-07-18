@@ -39,6 +39,9 @@ module "mysql" {
   deletion_protection = var.production_grade
   skip_final_snapshot = !var.production_grade
 
+  preferred_maintenance_window = var.maintenance_window
+  preferred_backup_window      = var.backup_window
+
   tags = var.tags
 }
 
@@ -67,6 +70,9 @@ module "postgres" {
   deletion_protection = var.production_grade
   skip_final_snapshot = !var.production_grade
 
+  preferred_maintenance_window = var.maintenance_window
+  preferred_backup_window      = var.backup_window
+
   tags = var.tags
 }
 
@@ -82,6 +88,8 @@ module "redis" {
   replicas                 = local.redis.replicas
   maxmemory_policy         = local.redis.maxmemory_policy
   snapshot_retention_limit = local.redis.snapshot_retention_limit
+  snapshot_window          = var.backup_window
+  maintenance_window       = var.maintenance_window
 
   vpc_id                     = var.vpc_id
   subnet_ids                 = var.subnet_ids
@@ -98,6 +106,8 @@ module "memcached" {
   name = "${var.name}-memcached"
   size = local.memcached.node != null ? null : coalesce(local.memcached.size, "mini")
   node = local.memcached.node
+
+  maintenance_window = var.maintenance_window
 
   vpc_id                     = var.vpc_id
   subnet_ids                 = var.subnet_ids

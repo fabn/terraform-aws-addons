@@ -32,6 +32,9 @@ output "mysql" {
     cluster_identifier = module.mysql[0].cluster_identifier
     security_group_id  = module.mysql[0].security_group_id
     scaling            = module.mysql[0].scaling
+
+    preferred_maintenance_window = module.mysql[0].preferred_maintenance_window
+    preferred_backup_window      = module.mysql[0].preferred_backup_window
   }
 }
 
@@ -45,6 +48,9 @@ output "postgres" {
     cluster_identifier = module.postgres[0].cluster_identifier
     security_group_id  = module.postgres[0].security_group_id
     scaling            = module.postgres[0].scaling
+
+    preferred_maintenance_window = module.postgres[0].preferred_maintenance_window
+    preferred_backup_window      = module.postgres[0].preferred_backup_window
   }
 }
 
@@ -57,6 +63,9 @@ output "redis" {
     engine            = module.redis[0].engine
     node_type         = module.redis[0].node_type
     replicas          = module.redis[0].replicas
+
+    maintenance_window = module.redis[0].maintenance_window
+    snapshot_window    = module.redis[0].snapshot_window
   }
 }
 
@@ -66,5 +75,7 @@ output "memcached" {
     host              = module.memcached[0].host
     security_group_id = module.memcached[0].security_group_id
     node              = module.memcached[0].node
+
+    maintenance_window = module.memcached[0].maintenance_window
   }
 }

@@ -60,6 +60,18 @@ variable "snapshot_retention_limit" {
   nullable    = false
 }
 
+variable "snapshot_window" {
+  description = "Daily UTC window when ElastiCache takes the RDB snapshot, format `hh24:mi-hh24:mi` (min 60 minutes, must not overlap the maintenance window). Ignored when snapshot_retention_limit = 0. Defaults to a nighttime slot before the maintenance window; set null to let AWS pick a random window."
+  type        = string
+  default     = "01:00-02:00"
+  nullable    = true
+
+  validation {
+    condition     = var.snapshot_window == null ? true : can(regex("^[0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}$", var.snapshot_window))
+    error_message = "snapshot_window must look like hh24:mi-hh24:mi (UTC), e.g. 01:00-02:00."
+  }
+}
+
 variable "engine" {
   description = "Cache engine: `redis` (Redis OSS) or `valkey`, the Redis-compatible engine ElastiCache offers at a lower price. Valkey speaks the same protocol, so `REDIS_URL` and clients keep working unchanged."
   type        = string
@@ -93,6 +105,18 @@ variable "parameters" {
     value = string
   }))
   default = []
+}
+
+variable "maintenance_window" {
+  description = "Weekly UTC window when AWS applies maintenance (engine upgrades, patches), format `ddd:hh24:mi-ddd:hh24:mi` (min 60 minutes). Defaults to a Monday-night slot so upgrades land off-peak; set null to let AWS pick a random window."
+  type        = string
+  default     = "mon:03:00-mon:04:00"
+  nullable    = true
+
+  validation {
+    condition     = var.maintenance_window == null ? true : can(regex("^[A-Za-z]{3}:[0-9]{2}:[0-9]{2}-[A-Za-z]{3}:[0-9]{2}:[0-9]{2}$", var.maintenance_window))
+    error_message = "maintenance_window must look like ddd:hh24:mi-ddd:hh24:mi (UTC), e.g. mon:03:00-mon:04:00."
+  }
 }
 
 variable "multi_az_enabled" {

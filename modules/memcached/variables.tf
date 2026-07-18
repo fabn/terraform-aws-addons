@@ -37,6 +37,18 @@ variable "engine_version" {
   nullable    = true
 }
 
+variable "maintenance_window" {
+  description = "Weekly UTC window when AWS applies maintenance (engine upgrades, patches), format `ddd:hh24:mi-ddd:hh24:mi` (min 60 minutes). Defaults to a Monday-night slot so upgrades land off-peak; set null to let AWS pick a random window."
+  type        = string
+  default     = "mon:03:00-mon:04:00"
+  nullable    = true
+
+  validation {
+    condition     = var.maintenance_window == null ? true : can(regex("^[A-Za-z]{3}:[0-9]{2}:[0-9]{2}-[A-Za-z]{3}:[0-9]{2}:[0-9]{2}$", var.maintenance_window))
+    error_message = "maintenance_window must look like ddd:hh24:mi-ddd:hh24:mi (UTC), e.g. mon:03:00-mon:04:00."
+  }
+}
+
 variable "vpc_id" {
   description = "VPC where the cluster is created."
   type        = string

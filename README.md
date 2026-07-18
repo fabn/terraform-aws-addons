@@ -159,6 +159,38 @@ Switching the engine also switches the parameter group family default
 still overridable on the submodule (e.g. `engine = "valkey"` with
 `parameter_group_family = "valkey7"`).
 
+#### Maintenance & backup windows
+
+By default AWS scatters each addon's maintenance across a random window. The
+wrapper instead pins them to an off-peak nighttime slot (UTC) so patches and
+engine upgrades land predictably:
+
+- `maintenance_window` (root, applied to **every** addon) — a weekly UTC
+  window, `ddd:hh24:mi-ddd:hh24:mi`; defaults to `mon:03:00-mon:04:00`
+  (Monday night). Forwarded to the Aurora clusters
+  (`preferred_maintenance_window`) and the ElastiCache addons
+  (`maintenance_window`).
+- `backup_window` (root, applied to every addon that persists data) — a
+  daily UTC window, `hh24:mi-hh24:mi`; defaults to `01:00-02:00`, just before
+  the maintenance window (the two must not overlap). Forwarded to the Aurora
+  clusters (`preferred_backup_window`) and to the redis RDB snapshot
+  (`snapshot_window`, ignored when `snapshot_retention_limit = 0`).
+
+```hcl
+module "addons" {
+  source = "fabn/addons/aws"
+  # ...
+  maintenance_window = "sun:04:00-sun:05:00" # move the shared window
+  backup_window      = null                  # or let AWS randomize this one
+}
+```
+
+Set either to `null` to hand the choice back to AWS. For per-addon windows,
+use the submodules directly — mysql/postgres take
+`preferred_maintenance_window` + `preferred_backup_window`, redis takes
+`maintenance_window` + `snapshot_window`, memcached takes
+`maintenance_window`.
+
 ### Addons
 
 | Addon | Backed by | env | sensitive_env |

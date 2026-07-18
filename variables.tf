@@ -112,6 +112,30 @@ variable "production_grade" {
   default     = true
 }
 
+variable "maintenance_window" {
+  description = "Weekly UTC maintenance window (`ddd:hh24:mi-ddd:hh24:mi`) applied to every addon (Aurora clusters and ElastiCache). Defaults to a Monday-night slot so patches land off-peak; set null to let AWS pick a random window per addon."
+  type        = string
+  default     = "mon:03:00-mon:04:00"
+  nullable    = true
+
+  validation {
+    condition     = var.maintenance_window == null ? true : can(regex("^[A-Za-z]{3}:[0-9]{2}:[0-9]{2}-[A-Za-z]{3}:[0-9]{2}:[0-9]{2}$", var.maintenance_window))
+    error_message = "maintenance_window must look like ddd:hh24:mi-ddd:hh24:mi (UTC), e.g. mon:03:00-mon:04:00."
+  }
+}
+
+variable "backup_window" {
+  description = "Daily UTC backup window (`hh24:mi-hh24:mi`) applied to every addon that persists data: the mysql/postgres Aurora clusters (`preferred_backup_window`) and the redis RDB snapshot (`snapshot_window`, when persistence is on); must not overlap the maintenance window. Defaults to a nighttime slot before the maintenance window; set null to let AWS pick a random window."
+  type        = string
+  default     = "01:00-02:00"
+  nullable    = true
+
+  validation {
+    condition     = var.backup_window == null ? true : can(regex("^[0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}$", var.backup_window))
+    error_message = "backup_window must look like hh24:mi-hh24:mi (UTC), e.g. 01:00-02:00."
+  }
+}
+
 variable "tags" {
   description = "Additional tags applied to all resources."
   type        = map(string)

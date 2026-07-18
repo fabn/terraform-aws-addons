@@ -86,6 +86,30 @@ variable "backup_retention_period" {
   nullable    = false
 }
 
+variable "preferred_maintenance_window" {
+  description = "Weekly UTC window when AWS applies system maintenance, format `ddd:hh24:mi-ddd:hh24:mi` (min 30 minutes). Defaults to a Monday-night slot so patches land off-peak; set null to let AWS pick a random window."
+  type        = string
+  default     = "mon:03:00-mon:04:00"
+  nullable    = true
+
+  validation {
+    condition     = var.preferred_maintenance_window == null ? true : can(regex("^[A-Za-z]{3}:[0-9]{2}:[0-9]{2}-[A-Za-z]{3}:[0-9]{2}:[0-9]{2}$", var.preferred_maintenance_window))
+    error_message = "preferred_maintenance_window must look like ddd:hh24:mi-ddd:hh24:mi (UTC), e.g. mon:03:00-mon:04:00."
+  }
+}
+
+variable "preferred_backup_window" {
+  description = "Daily UTC window when AWS takes automated backups, format `hh24:mi-hh24:mi` (min 30 minutes, must not overlap the maintenance window). Defaults to a nighttime slot before the maintenance window; set null to let AWS pick a random window."
+  type        = string
+  default     = "01:00-02:00"
+  nullable    = true
+
+  validation {
+    condition     = var.preferred_backup_window == null ? true : can(regex("^[0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}$", var.preferred_backup_window))
+    error_message = "preferred_backup_window must look like hh24:mi-hh24:mi (UTC), e.g. 01:00-02:00."
+  }
+}
+
 variable "replicas" {
   description = "Number of reader instances alongside the writer. Serverless v2 readers share the cluster's ACU range (size/scaling) but each instance scales independently within it; readers also serve as failover targets."
   type        = number

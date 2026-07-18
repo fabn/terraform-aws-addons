@@ -41,6 +41,10 @@ locals {
   )
 
   scheme = var.transit_encryption_enabled ? "rediss" : "redis"
+
+  # The snapshot window only makes sense when persistence is on; with
+  # retention = 0 there are no snapshots to schedule.
+  snapshot_window = var.snapshot_retention_limit > 0 ? var.snapshot_window : null
 }
 
 # https://github.com/terraform-aws-modules/terraform-aws-elasticache
@@ -75,6 +79,10 @@ module "redis" {
 
   # Persistence = daily RDB snapshots; 0 disables them entirely.
   snapshot_retention_limit = var.snapshot_retention_limit
+  snapshot_window          = local.snapshot_window
+
+  # Weekly maintenance window (UTC); null lets AWS pick a random window.
+  maintenance_window = var.maintenance_window
 
   apply_immediately = true
 

@@ -80,3 +80,39 @@ run "rejects_size_and_node_together" {
 
   expect_failures = [var.size]
 }
+
+run "maintenance_window_defaults_to_a_nighttime_slot" {
+  command = apply
+
+  module {
+    source = "./modules/memcached"
+  }
+
+  variables {
+    name       = "myapp-memcached"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.maintenance_window == "mon:03:00-mon:04:00"
+    error_message = "maintenance should default to a Monday-night UTC window"
+  }
+}
+
+run "rejects_malformed_maintenance_window" {
+  command = plan
+
+  module {
+    source = "./modules/memcached"
+  }
+
+  variables {
+    name               = "myapp-memcached"
+    maintenance_window = "monday night"
+    vpc_id             = "vpc-12345"
+    subnet_ids         = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.maintenance_window]
+}

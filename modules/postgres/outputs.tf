@@ -57,3 +57,13 @@ output "scaling" {
   description = "Resolved Serverless v2 capacity range (from `size` or `scaling`)."
   value       = local.scaling
 }
+
+output "preferred_maintenance_window" {
+  description = "Weekly UTC maintenance window (null when AWS picks a random one)."
+  value       = var.preferred_maintenance_window
+}
+
+output "preferred_backup_window" {
+  description = "Daily UTC automated-backup window (null when AWS picks a random one)."
+  value       = var.preferred_backup_window
+}

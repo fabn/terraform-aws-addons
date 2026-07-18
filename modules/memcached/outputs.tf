@@ -28,3 +28,8 @@ output "node" {
   description = "Resolved node configuration (from `size` or `node`)."
   value       = local.node
 }
+
+output "maintenance_window" {
+  description = "Weekly UTC maintenance window (null when AWS picks a random one)."
+  value       = var.maintenance_window
+}
