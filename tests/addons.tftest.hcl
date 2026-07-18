@@ -5,7 +5,15 @@
 # env / sensitive_env merge every enabled addon's vars.
 
 mock_provider "aws" {}
-mock_provider "random" {}
+mock_provider "random" {
+  # The RDS instance identifier derives from random_pet: the auto-generated
+  # mock string may start with a digit, which the AWS provider rejects.
+  mock_resource "random_pet" {
+    defaults = {
+      id = "mock-pet"
+    }
+  }
+}
 
 run "deploys_declared_addons_and_merges_env" {
   command = apply

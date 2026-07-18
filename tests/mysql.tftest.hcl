@@ -24,7 +24,15 @@ mock_provider "aws" {
     }
   }
 }
-mock_provider "random" {}
+mock_provider "random" {
+  # The RDS instance identifier derives from random_pet: the auto-generated
+  # mock string may start with a digit, which the AWS provider rejects.
+  mock_resource "random_pet" {
+    defaults = {
+      id = "mock-pet"
+    }
+  }
+}
 
 run "default_size_is_mini" {
   command = apply
