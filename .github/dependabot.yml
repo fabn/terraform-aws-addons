@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "terraform"
+    # Every root that pins provider/module versions: bumping only one of them
+    # makes terraform init fail on conflicting constraints across the tree.
+    # Extend with "/modules/*" and "/examples/*" as addon modules land.
+    directories:
+      - "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    # One PR per dependency across all directories, so a provider bump lands
+    # atomically in the whole tree.
+    groups:
+      terraform:
+        patterns:
+          - "*"

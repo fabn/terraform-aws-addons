@@ -1,0 +1,6 @@
+# Development toolchain — https://mise.jdx.dev
+# Run `mise install` once after cloning.
+[tools]
+terraform = "1.11.4"
+lefthook = "2.1.6"
+actionlint = "1.7.7"
