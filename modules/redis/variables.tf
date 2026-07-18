@@ -4,7 +4,7 @@ variable "name" {
 }
 
 variable "size" {
-  description = "Heroku-style preset size (mini, small, medium, large) mapped to a cache node type. Set to null and pass `node` for a custom node type / count."
+  description = "Heroku-style preset size (mini, small, medium, large) mapped to a cache node type. Set to null and pass `node` for a custom node type."
   type        = string
   default     = "mini"
   nullable    = true
@@ -21,13 +21,43 @@ variable "size" {
 }
 
 variable "node" {
-  description = "Custom node configuration, alternative to `size`. num_nodes counts primary + replicas."
+  description = "Custom node type, alternative to `size`."
   type = object({
     node_type = string
-    num_nodes = optional(number, 1)
   })
   default  = null
   nullable = true
+}
+
+variable "replicas" {
+  description = "Number of read replicas alongside the primary. With replicas > 0 automatic failover is enabled (the ElastiCache equivalent of Sentinel: a replica is promoted and the primary endpoint DNS follows)."
+  type        = number
+  default     = 0
+  nullable    = false
+
+  validation {
+    condition     = var.replicas >= 0 && var.replicas <= 5
+    error_message = "replicas must be between 0 and 5."
+  }
+}
+
+variable "maxmemory_policy" {
+  description = "Redis eviction policy. noeviction (the default) suits queue backends that must not silently drop keys; use allkeys-lru (or another eviction policy) when Redis is a cache."
+  type        = string
+  default     = "noeviction"
+  nullable    = false
+
+  validation {
+    condition     = contains(["noeviction", "allkeys-lru", "volatile-lru", "allkeys-lfu", "volatile-lfu", "allkeys-random", "volatile-random", "volatile-ttl"], var.maxmemory_policy)
+    error_message = "maxmemory_policy must be a valid Redis eviction policy (noeviction, allkeys-lru, volatile-lru, allkeys-lfu, volatile-lfu, allkeys-random, volatile-random, volatile-ttl)."
+  }
+}
+
+variable "snapshot_retention_limit" {
+  description = "Days of daily RDB snapshots to retain — the ElastiCache form of persistence. Set 0 to opt out (recommended when Redis is a cache)."
+  type        = number
+  default     = 1
+  nullable    = false
 }
 
 variable "engine_version" {
@@ -43,24 +73,22 @@ variable "parameter_group_family" {
 }
 
 variable "parameters" {
-  description = "Parameters applied to the dedicated parameter group. noeviction by default: as a Sidekiq/queue backend Redis must not silently drop keys under memory pressure."
+  description = "Extra parameters applied to the dedicated parameter group, merged after maxmemory_policy."
   type = list(object({
     name  = string
     value = string
   }))
-  default = [
-    { name = "maxmemory-policy", value = "noeviction" }
-  ]
+  default = []
 }
 
 variable "multi_az_enabled" {
-  description = "Enable Multi-AZ with automatic failover. Requires a custom `node` with num_nodes >= 2."
+  description = "Spread primary and replicas across AZs with Multi-AZ failover. Requires replicas >= 1."
   type        = bool
   default     = false
 
   validation {
-    condition     = !var.multi_az_enabled || try(var.node.num_nodes, 1) >= 2
-    error_message = "multi_az_enabled requires node.num_nodes >= 2 (a replica to fail over to)."
+    condition     = !var.multi_az_enabled || var.replicas >= 1
+    error_message = "multi_az_enabled requires replicas >= 1 (a replica to fail over to)."
   }
 }
 

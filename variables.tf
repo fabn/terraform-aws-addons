@@ -24,13 +24,15 @@ variable "addons" {
   description = "Map of addon name => addon spec. Supported addons: mysql, redis, memcached."
   type = map(object({
     size = optional(string)
+    # mysql/redis only: reader/replica instances alongside the writer/primary.
+    replicas = optional(number)
     # mysql only: custom Serverless v2 capacity range.
     scaling = optional(object({
       min_capacity             = number
       max_capacity             = number
       seconds_until_auto_pause = optional(number)
     }))
-    # redis/memcached only: custom node type/count.
+    # redis/memcached only: custom node type (+ node count on memcached).
     node = optional(object({
       node_type = string
       num_nodes = optional(number, 1)
@@ -38,6 +40,9 @@ variable "addons" {
     # mysql only.
     database = optional(string)
     username = optional(string)
+    # redis only.
+    maxmemory_policy         = optional(string)
+    snapshot_retention_limit = optional(number)
   }))
   default = {}
 
@@ -59,6 +64,16 @@ variable "addons" {
   validation {
     condition     = alltrue([for k, spec in var.addons : spec.node == null || k == "redis" || k == "memcached"])
     error_message = "node only applies to the redis and memcached addons."
+  }
+
+  validation {
+    condition     = alltrue([for k, spec in var.addons : spec.replicas == null || k == "mysql" || k == "redis"])
+    error_message = "replicas only applies to the mysql and redis addons."
+  }
+
+  validation {
+    condition     = alltrue([for k, spec in var.addons : (spec.maxmemory_policy == null && spec.snapshot_retention_limit == null) || k == "redis"])
+    error_message = "maxmemory_policy and snapshot_retention_limit only apply to the redis addon."
   }
 }
 

@@ -47,8 +47,8 @@ run "deploys_declared_addons_and_merges_env" {
   }
 
   assert {
-    condition     = output.redis.node.node_type == "cache.t4g.micro"
-    error_message = "redis size=mini should resolve to cache.t4g.micro"
+    condition     = output.redis.node_type == "cache.t4g.micro" && output.redis.replicas == 0
+    error_message = "redis size=mini should resolve to a single cache.t4g.micro primary"
   }
 
   assert {
@@ -73,6 +73,11 @@ run "defaults_to_mini_and_supports_custom_resources" {
           seconds_until_auto_pause = 600
         }
       }
+      redis = {
+        replicas                 = 1
+        maxmemory_policy         = "allkeys-lru"
+        snapshot_retention_limit = 0
+      }
       memcached = {}
     }
   }
@@ -80,6 +85,11 @@ run "defaults_to_mini_and_supports_custom_resources" {
   assert {
     condition     = output.mysql.scaling.max_capacity == 16
     error_message = "custom mysql scaling should pass through the wrapper"
+  }
+
+  assert {
+    condition     = output.redis.replicas == 1
+    error_message = "redis cache posture (replicas, eviction, no persistence) should pass through the wrapper"
   }
 
   assert {

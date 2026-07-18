@@ -49,7 +49,7 @@ module "cluster" {
   serverlessv2_scaling_configuration = local.scaling
   # First instance is the writer, every extra one is a reader replica.
   # Performance insights is an instance-level setting on Aurora.
-  instances = { for i in range(var.cluster_size) : tostring(i + 1) => {
+  instances = { for i in range(1 + var.replicas) : tostring(i + 1) => {
     performance_insights_enabled          = var.monitoring_enabled
     performance_insights_retention_period = var.monitoring_enabled ? 7 : null
   } }

@@ -58,10 +58,16 @@ variable "engine_version" {
   nullable    = true
 }
 
-variable "cluster_size" {
-  description = "Number of instances in the cluster: the first is the writer, every extra one a reader replica."
+variable "replicas" {
+  description = "Number of reader instances alongside the writer. Serverless v2 readers share the cluster's ACU range (size/scaling) but each instance scales independently within it; readers also serve as failover targets."
   type        = number
-  default     = 1
+  default     = 0
+  nullable    = false
+
+  validation {
+    condition     = var.replicas >= 0 && var.replicas <= 15
+    error_message = "replicas must be between 0 and 15."
+  }
 }
 
 variable "vpc_id" {

@@ -93,6 +93,10 @@ Custom capacity: `size = null` +
 `scaling = { min_capacity = 0, max_capacity = 16, seconds_until_auto_pause = 600 }`
 (scale-to-zero requires `min_capacity = 0` and Aurora MySQL >= 3.08).
 
+Readers: `replicas = n` adds reader instances (default 0, writer only).
+Serverless v2 readers share the cluster's ACU range but each instance
+scales independently within it; readers double as failover targets.
+
 #### redis / memcached — ElastiCache node types
 
 | Size | Node type | Memory |
@@ -102,8 +106,28 @@ Custom capacity: `size = null` +
 | medium | cache.t4g.medium | ~3.1 GiB |
 | large | cache.m7g.large | ~6.4 GiB |
 
-Custom nodes: `size = null` +
-`node = { node_type = "cache.r7g.xlarge", num_nodes = 2 }`.
+Custom nodes: `size = null` + `node = { node_type = "cache.r7g.xlarge" }`
+(redis; add `num_nodes` for multi-node memcached).
+
+#### Redis: queue vs cache posture
+
+The redis defaults suit a queue backend (Sidekiq): `maxmemory_policy =
+"noeviction"` and one day of RDB snapshots. When Redis is a cache, flip
+both:
+
+```hcl
+redis = {
+  size                     = "small"
+  maxmemory_policy         = "allkeys-lru"
+  snapshot_retention_limit = 0 # opt out of persistence
+  replicas                 = 1 # optional HA
+}
+```
+
+There is no Redis Sentinel on ElastiCache: with `replicas > 0` the addon
+enables automatic failover — a replica is promoted and the primary endpoint
+DNS follows, no sentinel-aware client needed. Add `multi_az_enabled = true`
+(submodule) for AZ-spread placement.
 
 ### Addons
 

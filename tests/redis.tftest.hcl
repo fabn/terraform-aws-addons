@@ -19,8 +19,8 @@ run "default_size_is_mini" {
   }
 
   assert {
-    condition     = output.node.node_type == "cache.t4g.micro" && output.node.num_nodes == 1
-    error_message = "mini should resolve to a single cache.t4g.micro node"
+    condition     = output.node_type == "cache.t4g.micro" && output.replicas == 0
+    error_message = "mini should resolve to a single cache.t4g.micro primary"
   }
 
   assert {
@@ -49,7 +49,7 @@ run "large_size_maps_to_m7g" {
   }
 
   assert {
-    condition     = output.node.node_type == "cache.m7g.large"
+    condition     = output.node_type == "cache.m7g.large"
     error_message = "large should resolve to cache.m7g.large"
   }
 }
@@ -66,15 +66,15 @@ run "custom_node_replaces_size" {
     size = null
     node = {
       node_type = "cache.r7g.xlarge"
-      num_nodes = 2
     }
+    replicas   = 2
     vpc_id     = "vpc-12345"
     subnet_ids = ["subnet-1", "subnet-2"]
   }
 
   assert {
-    condition     = output.node.node_type == "cache.r7g.xlarge" && output.node.num_nodes == 2
-    error_message = "custom node should pass through untouched"
+    condition     = output.node_type == "cache.r7g.xlarge" && output.replicas == 2
+    error_message = "custom node and replicas should pass through untouched"
   }
 }
 
@@ -98,6 +98,44 @@ run "transit_encryption_switches_scheme" {
   }
 }
 
+run "cache_posture" {
+  command = apply
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name                     = "myapp-redis"
+    maxmemory_policy         = "allkeys-lru"
+    snapshot_retention_limit = 0
+    vpc_id                   = "vpc-12345"
+    subnet_ids               = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = can(output.env.REDIS_URL)
+    error_message = "cache posture (eviction on, persistence off) should be accepted"
+  }
+}
+
+run "rejects_invalid_eviction_policy" {
+  command = plan
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name             = "myapp-redis"
+    maxmemory_policy = "keep-everything"
+    vpc_id           = "vpc-12345"
+    subnet_ids       = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.maxmemory_policy]
+}
+
 run "rejects_size_and_node_together" {
   command = plan
 
@@ -118,7 +156,7 @@ run "rejects_size_and_node_together" {
   expect_failures = [var.size]
 }
 
-run "rejects_multi_az_on_single_node" {
+run "rejects_multi_az_without_replicas" {
   command = plan
 
   module {

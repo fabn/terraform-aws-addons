@@ -39,7 +39,8 @@ output "redis" {
     host              = module.redis[0].host
     reader_host       = module.redis[0].reader_host
     security_group_id = module.redis[0].security_group_id
-    node              = module.redis[0].node
+    node_type         = module.redis[0].node_type
+    replicas          = module.redis[0].replicas
   }
 }
 

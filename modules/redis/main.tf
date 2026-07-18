@@ -1,7 +1,16 @@
 # Redis addon: ElastiCache replication group via the official
 # terraform-aws-modules/elasticache module. Single node by default, dedicated
-# parameter group with noeviction (safe for Sidekiq queues), no AUTH inside
-# the VPC — access is controlled by the security group.
+# parameter group, no AUTH inside the VPC — access is controlled by the
+# security group.
+#
+# The defaults suit a queue backend (Sidekiq): noeviction + daily snapshot.
+# For a pure cache flip maxmemory_policy (e.g. allkeys-lru) and set
+# snapshot_retention_limit = 0.
+#
+# There is no Redis Sentinel on ElastiCache: high availability is the
+# managed equivalent — with replicas > 0 automatic failover promotes a
+# replica and repoints the primary endpoint DNS, no sentinel-aware client
+# needed (add multi_az_enabled for AZ-spread placement).
 
 locals {
   # Heroku-style preset sizes mapped to Graviton cache node types.
@@ -12,7 +21,7 @@ locals {
     large  = "cache.m7g.large"  # ~6.4 GiB
   }
 
-  node = var.size != null ? { node_type = local.sizes[var.size], num_nodes = 1 } : var.node
+  node_type = var.size != null ? local.sizes[var.size] : var.node.node_type
 
   security_group_rules = merge(
     { for i, cidr in var.allowed_cidr_blocks :
@@ -37,16 +46,25 @@ module "redis" {
 
   engine             = "redis"
   engine_version     = var.engine_version
-  node_type          = local.node.node_type
-  num_cache_clusters = local.node.num_nodes
+  node_type          = local.node_type
+  num_cache_clusters = 1 + var.replicas
 
+  # Sentinel-equivalent HA: with at least one replica, failover promotes it
+  # and the primary endpoint DNS follows.
+  automatic_failover_enabled = var.replicas > 0
   multi_az_enabled           = var.multi_az_enabled
   at_rest_encryption_enabled = true
   transit_encryption_enabled = var.transit_encryption_enabled
 
   create_parameter_group = true
   parameter_group_family = var.parameter_group_family
-  parameters             = var.parameters
+  parameters = concat(
+    [{ name = "maxmemory-policy", value = var.maxmemory_policy }],
+    var.parameters,
+  )
+
+  # Persistence = daily RDB snapshots; 0 disables them entirely.
+  snapshot_retention_limit = var.snapshot_retention_limit
 
   apply_immediately = true
 

@@ -26,6 +26,7 @@ module "mysql" {
   # The default database is named after the stack, not the addon instance.
   database = coalesce(local.mysql.database, replace(var.name, "-", "_"))
   username = local.mysql.username
+  replicas = local.mysql.replicas
 
   vpc_id                     = var.vpc_id
   subnet_ids                 = var.subnet_ids
@@ -45,7 +46,11 @@ module "redis" {
 
   name = "${var.name}-redis"
   size = local.redis.node != null ? null : coalesce(local.redis.size, "mini")
-  node = local.redis.node
+  node = local.redis.node == null ? null : { node_type = local.redis.node.node_type }
+
+  replicas                 = local.redis.replicas
+  maxmemory_policy         = local.redis.maxmemory_policy
+  snapshot_retention_limit = local.redis.snapshot_retention_limit
 
   vpc_id                     = var.vpc_id
   subnet_ids                 = var.subnet_ids

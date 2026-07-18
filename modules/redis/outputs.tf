@@ -20,7 +20,7 @@ output "host" {
 }
 
 output "reader_host" {
-  description = "Reader endpoint of the replication group."
+  description = "Reader endpoint of the replication group (load-balances across replicas)."
   value       = module.redis.replication_group_reader_endpoint_address
 }
 
@@ -29,7 +29,12 @@ output "security_group_id" {
   value       = module.redis.security_group_id
 }
 
-output "node" {
-  description = "Resolved node configuration (from `size` or `node`)."
-  value       = local.node
+output "node_type" {
+  description = "Resolved cache node type (from `size` or `node`)."
+  value       = local.node_type
+}
+
+output "replicas" {
+  description = "Number of read replicas."
+  value       = var.replicas
 }
