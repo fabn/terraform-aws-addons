@@ -23,6 +23,16 @@ locals {
 
   node_type = var.size != null ? local.sizes[var.size] : var.node.node_type
 
+  # Per-engine defaults for version and parameter group family. Valkey is the
+  # Redis-compatible engine ElastiCache prices lower; it keeps the same
+  # protocol (REDIS_URL stays), only the parameter group family changes.
+  engine_defaults = {
+    redis  = { engine_version = "7.1", parameter_group_family = "redis7" }
+    valkey = { engine_version = "8.0", parameter_group_family = "valkey8" }
+  }
+  engine_version         = coalesce(var.engine_version, local.engine_defaults[var.engine].engine_version)
+  parameter_group_family = coalesce(var.parameter_group_family, local.engine_defaults[var.engine].parameter_group_family)
+
   security_group_rules = merge(
     { for i, cidr in var.allowed_cidr_blocks :
     "ingress_cidr_${i}" => { description = "Redis from ${cidr}", cidr_ipv4 = cidr } },
@@ -44,8 +54,8 @@ module "redis" {
   replication_group_id = var.name
   description          = "${var.name} redis addon"
 
-  engine             = "redis"
-  engine_version     = var.engine_version
+  engine             = var.engine
+  engine_version     = local.engine_version
   node_type          = local.node_type
   num_cache_clusters = 1 + var.replicas
 
@@ -57,7 +67,7 @@ module "redis" {
   transit_encryption_enabled = var.transit_encryption_enabled
 
   create_parameter_group = true
-  parameter_group_family = var.parameter_group_family
+  parameter_group_family = local.parameter_group_family
   parameters = concat(
     [{ name = "maxmemory-policy", value = var.maxmemory_policy }],
     var.parameters,

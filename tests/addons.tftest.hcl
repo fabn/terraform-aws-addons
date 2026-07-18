@@ -98,6 +98,82 @@ run "defaults_to_mini_and_supports_custom_resources" {
   }
 }
 
+run "redis_defaults_to_redis_engine" {
+  command = apply
+
+  variables {
+    name             = "myapp"
+    production_grade = false
+    vpc_id           = "vpc-12345"
+    subnet_ids       = ["subnet-1", "subnet-2"]
+    addons = {
+      redis = { size = "mini" }
+    }
+  }
+
+  assert {
+    condition     = output.redis.engine == "redis"
+    error_message = "redis addon should default to the redis engine"
+  }
+}
+
+run "redis_accepts_valkey_engine" {
+  command = apply
+
+  variables {
+    name             = "myapp"
+    production_grade = false
+    vpc_id           = "vpc-12345"
+    subnet_ids       = ["subnet-1", "subnet-2"]
+    addons = {
+      redis = {
+        size   = "mini"
+        engine = "valkey"
+      }
+    }
+  }
+
+  assert {
+    condition     = output.redis.engine == "valkey"
+    error_message = "engine = valkey should pass through the wrapper to the redis addon"
+  }
+
+  assert {
+    condition     = can(output.env.REDIS_URL)
+    error_message = "valkey keeps the addon contract: REDIS_URL is still emitted"
+  }
+}
+
+run "rejects_engine_on_non_redis_addon" {
+  command = plan
+
+  variables {
+    name       = "myapp"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    addons = {
+      memcached = { engine = "valkey" }
+    }
+  }
+
+  expect_failures = [var.addons]
+}
+
+run "rejects_unknown_redis_engine" {
+  command = plan
+
+  variables {
+    name       = "myapp"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    addons = {
+      redis = { engine = "keydb" }
+    }
+  }
+
+  expect_failures = [var.addons]
+}
+
 run "rejects_unknown_addon" {
   command = plan
 

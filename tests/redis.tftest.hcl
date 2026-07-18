@@ -34,6 +34,89 @@ run "default_size_is_mini" {
   }
 }
 
+run "default_engine_is_redis" {
+  command = apply
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name       = "myapp-redis"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.engine == "redis" && output.parameter_group_family == "redis7"
+    error_message = "redis should be the default engine on the redis7 parameter group family"
+  }
+}
+
+run "valkey_engine_switches_family" {
+  command = apply
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name       = "myapp-redis"
+    engine     = "valkey"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.engine == "valkey" && output.parameter_group_family == "valkey8"
+    error_message = "valkey should default to the valkey8 parameter group family"
+  }
+
+  assert {
+    condition     = startswith(output.env.REDIS_URL, "redis://")
+    error_message = "valkey keeps the redis protocol: REDIS_URL is unchanged"
+  }
+}
+
+run "engine_defaults_can_be_overridden" {
+  command = apply
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name                   = "myapp-redis"
+    engine                 = "valkey"
+    engine_version         = "7.2"
+    parameter_group_family = "valkey7"
+    vpc_id                 = "vpc-12345"
+    subnet_ids             = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.parameter_group_family == "valkey7"
+    error_message = "an explicit parameter_group_family should win over the engine default"
+  }
+}
+
+run "rejects_unknown_engine" {
+  command = plan
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name       = "myapp-redis"
+    engine     = "keydb"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.engine]
+}
+
 run "large_size_maps_to_m7g" {
   command = apply
 

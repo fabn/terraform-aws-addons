@@ -49,6 +49,7 @@ module "redis" {
   size = local.redis.node != null ? null : coalesce(local.redis.size, "mini")
   node = local.redis.node == null ? null : { node_type = local.redis.node.node_type }
 
+  engine                   = local.redis.engine
   replicas                 = local.redis.replicas
   maxmemory_policy         = local.redis.maxmemory_policy
   snapshot_retention_limit = local.redis.snapshot_retention_limit
