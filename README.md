@@ -170,10 +170,11 @@ engine upgrades land predictably:
   (Monday night). Forwarded to the Aurora clusters
   (`preferred_maintenance_window`) and the ElastiCache addons
   (`maintenance_window`).
-- `backup_window` (root, mysql/postgres only) — a daily UTC window,
-  `hh24:mi-hh24:mi`; defaults to `01:00-02:00`, just before the maintenance
-  window (RDS requires the two not to overlap). Forwarded as
-  `preferred_backup_window`.
+- `backup_window` (root, applied to every addon that persists data) — a
+  daily UTC window, `hh24:mi-hh24:mi`; defaults to `01:00-02:00`, just before
+  the maintenance window (the two must not overlap). Forwarded to the Aurora
+  clusters (`preferred_backup_window`) and to the redis RDB snapshot
+  (`snapshot_window`, ignored when `snapshot_retention_limit = 0`).
 
 ```hcl
 module "addons" {
@@ -186,8 +187,9 @@ module "addons" {
 
 Set either to `null` to hand the choice back to AWS. For per-addon windows,
 use the submodules directly — mysql/postgres take
-`preferred_maintenance_window` + `preferred_backup_window`, redis/memcached
-take `maintenance_window`.
+`preferred_maintenance_window` + `preferred_backup_window`, redis takes
+`maintenance_window` + `snapshot_window`, memcached takes
+`maintenance_window`.
 
 ### Addons
 

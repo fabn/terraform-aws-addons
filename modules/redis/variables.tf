@@ -60,6 +60,18 @@ variable "snapshot_retention_limit" {
   nullable    = false
 }
 
+variable "snapshot_window" {
+  description = "Daily UTC window when ElastiCache takes the RDB snapshot, format `hh24:mi-hh24:mi` (min 60 minutes, must not overlap the maintenance window). Ignored when snapshot_retention_limit = 0. Defaults to a nighttime slot before the maintenance window; set null to let AWS pick a random window."
+  type        = string
+  default     = "01:00-02:00"
+  nullable    = true
+
+  validation {
+    condition     = var.snapshot_window == null ? true : can(regex("^[0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}$", var.snapshot_window))
+    error_message = "snapshot_window must look like hh24:mi-hh24:mi (UTC), e.g. 01:00-02:00."
+  }
+}
+
 variable "engine" {
   description = "Cache engine: `redis` (Redis OSS) or `valkey`, the Redis-compatible engine ElastiCache offers at a lower price. Valkey speaks the same protocol, so `REDIS_URL` and clients keep working unchanged."
   type        = string

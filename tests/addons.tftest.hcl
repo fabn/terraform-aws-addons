@@ -291,8 +291,9 @@ run "shared_maintenance_window_applies_to_every_addon" {
     condition = alltrue([
       output.mysql.preferred_backup_window == "01:00-02:00",
       output.postgres.preferred_backup_window == "01:00-02:00",
+      output.redis.snapshot_window == "01:00-02:00",
     ])
-    error_message = "the shared backup window default should reach the SQL addons"
+    error_message = "the shared backup window default should reach every addon that persists data (SQL backups + redis snapshot)"
   }
 }
 
@@ -318,8 +319,8 @@ run "shared_windows_can_be_overridden_or_disabled" {
   }
 
   assert {
-    condition     = output.mysql.preferred_backup_window == null
-    error_message = "a null backup window should pass through to the SQL addons"
+    condition     = output.mysql.preferred_backup_window == null && output.redis.snapshot_window == null
+    error_message = "a null backup window should pass through to every addon that persists data"
   }
 }
 

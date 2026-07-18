@@ -88,6 +88,7 @@ module "redis" {
   replicas                 = local.redis.replicas
   maxmemory_policy         = local.redis.maxmemory_policy
   snapshot_retention_limit = local.redis.snapshot_retention_limit
+  snapshot_window          = var.backup_window
   maintenance_window       = var.maintenance_window
 
   vpc_id                     = var.vpc_id

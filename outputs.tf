@@ -65,6 +65,7 @@ output "redis" {
     replicas          = module.redis[0].replicas
 
     maintenance_window = module.redis[0].maintenance_window
+    snapshot_window    = module.redis[0].snapshot_window
   }
 }
 

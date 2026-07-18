@@ -125,7 +125,7 @@ variable "maintenance_window" {
 }
 
 variable "backup_window" {
-  description = "Daily UTC automated-backup window (`hh24:mi-hh24:mi`) applied to the mysql/postgres Aurora clusters; must not overlap the maintenance window. Defaults to a nighttime slot before the maintenance window; set null to let AWS pick a random window."
+  description = "Daily UTC backup window (`hh24:mi-hh24:mi`) applied to every addon that persists data: the mysql/postgres Aurora clusters (`preferred_backup_window`) and the redis RDB snapshot (`snapshot_window`, when persistence is on); must not overlap the maintenance window. Defaults to a nighttime slot before the maintenance window; set null to let AWS pick a random window."
   type        = string
   default     = "01:00-02:00"
   nullable    = true

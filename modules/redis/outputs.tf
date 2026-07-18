@@ -53,3 +53,8 @@ output "maintenance_window" {
   description = "Weekly UTC maintenance window (null when AWS picks a random one)."
   value       = var.maintenance_window
 }
+
+output "snapshot_window" {
+  description = "Daily UTC snapshot window (null when persistence is off or AWS picks a random one)."
+  value       = local.snapshot_window
+}
