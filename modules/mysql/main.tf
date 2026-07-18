@@ -1,7 +1,7 @@
-# MySQL addon: Aurora MySQL Serverless v2 via the battle-tested
-# cloudposse/rds-cluster module. The admin password is generated per
-# instance and lives only in TF state + the caller's Secret, Heroku-addon
-# style.
+# MySQL addon: Aurora MySQL Serverless v2 via the official
+# terraform-aws-modules/rds-aurora module. The admin password is generated
+# per instance and lives only in TF state + the caller's Secret,
+# Heroku-addon style.
 
 locals {
   # Heroku-style preset sizes, expressed in Aurora Capacity Units
@@ -18,6 +18,13 @@ locals {
   scaling = var.size != null ? local.sizes[var.size] : var.scaling
   # MySQL schema names cannot contain hyphens, cluster names can.
   database = coalesce(var.database, replace(var.name, "-", "_"))
+
+  security_group_ingress_rules = merge(
+    { for i, cidr in var.allowed_cidr_blocks :
+    "cidr_${i}" => { description = "MySQL from ${cidr}", cidr_ipv4 = cidr } },
+    { for i, sg in var.allowed_security_group_ids :
+    "sg_${i}" => { description = "MySQL from peer security group", referenced_security_group_id = sg } },
+  )
 }
 
 resource "random_password" "admin" {
@@ -26,53 +33,56 @@ resource "random_password" "admin" {
   special = false
 }
 
-# https://github.com/cloudposse/terraform-aws-rds-cluster
+# https://github.com/terraform-aws-modules/terraform-aws-rds-aurora
 module "cluster" {
-  source  = "cloudposse/rds-cluster/aws"
-  version = "2.3.0"
+  source  = "terraform-aws-modules/rds-aurora/aws"
+  version = "~> 10.0"
 
   name = var.name
 
   engine         = "aurora-mysql"
   engine_version = var.engine_version
-  cluster_family = var.cluster_family
   # Serverless v2 clusters run in provisioned mode with db.serverless
   # instances; capacity comes from serverlessv2_scaling_configuration.
   engine_mode                        = "provisioned"
-  instance_type                      = "db.serverless"
+  cluster_instance_class             = "db.serverless"
   serverlessv2_scaling_configuration = local.scaling
   # First instance is the writer, every extra one is a reader replica.
-  cluster_size = var.cluster_size
+  # Performance insights is an instance-level setting on Aurora.
+  instances = { for i in range(var.cluster_size) : tostring(i + 1) => {
+    performance_insights_enabled          = var.monitoring_enabled
+    performance_insights_retention_period = var.monitoring_enabled ? 7 : null
+  } }
 
-  db_name        = local.database
-  admin_user     = var.username
-  admin_password = random_password.admin.result
+  database_name = local.database
+  # The password stays out of the cluster state (write-only argument); the
+  # generated random_password holds the value the outputs compose.
+  master_username             = var.username
+  manage_master_user_password = false
+  master_password_wo          = random_password.admin.result
+  master_password_wo_version  = 1
 
   # Network: private subnets only, access granted to explicit peers.
-  subnets             = var.subnet_ids
-  vpc_id              = var.vpc_id
-  allowed_cidr_blocks = var.allowed_cidr_blocks
-  security_groups     = var.allowed_security_group_ids
+  create_db_subnet_group       = true
+  subnets                      = var.subnet_ids
+  vpc_id                       = var.vpc_id
+  security_group_ingress_rules = local.security_group_ingress_rules
 
-  # Monitoring: enhanced monitoring + performance/database insights. Key
-  # must not be passed when performance insights is disabled.
-  rds_monitoring_interval               = var.monitoring_enabled ? 60 : 0
-  enhanced_monitoring_role_enabled      = var.monitoring_enabled
-  performance_insights_enabled          = var.monitoring_enabled
-  performance_insights_retention_period = var.monitoring_enabled ? 7 : null
-  database_insights_mode                = var.monitoring_enabled ? "standard" : null
+  # Monitoring: enhanced monitoring + database insights (performance
+  # insights is per instance, see the instances map).
+  create_monitoring_role      = var.monitoring_enabled
+  cluster_monitoring_interval = var.monitoring_enabled ? 60 : 0
+  database_insights_mode      = var.monitoring_enabled ? "standard" : null
 
   # Explicit params
-  apply_immediately          = true
-  publicly_accessible        = false
-  auto_minor_version_upgrade = true
-  storage_encrypted          = true
-  copy_tags_to_snapshot      = true
-  deletion_protection        = var.deletion_protection
-  skip_final_snapshot        = var.skip_final_snapshot
+  apply_immediately     = true
+  storage_encrypted     = true
+  copy_tags_to_snapshot = true
+  deletion_protection   = var.deletion_protection
+  skip_final_snapshot   = var.skip_final_snapshot
 
-  # No cluster_parameters on purpose: binlog_format would keep a scale-to-0
-  # cluster from ever pausing.
+  # No cluster parameter group on purpose: binlog_format would keep a
+  # scale-to-0 cluster from ever pausing.
 
   tags = var.tags
 }

@@ -20,8 +20,8 @@ run "provisions_the_stack" {
   }
 
   assert {
-    condition     = length(output.env.MEMCACHIER_SERVERS) > 0 && endswith(output.env.MEMCACHIER_SERVERS, ":11211")
-    error_message = "MEMCACHIER_SERVERS should list the memcached node(s)"
+    condition     = startswith(output.env.MEMCACHED_SERVER_URL, "memcached://") && endswith(output.env.MEMCACHED_SERVER_URL, ":11211")
+    error_message = "MEMCACHED_SERVER_URL should list the memcached node URL(s)"
   }
 
   assert {

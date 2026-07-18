@@ -52,15 +52,10 @@ variable "username" {
 }
 
 variable "engine_version" {
-  description = "Aurora MySQL engine version. Empty string lets AWS pick the default for the family. Scale-to-zero requires >= 3.08."
+  description = "Aurora MySQL engine version. Null lets AWS pick the default. Scale-to-zero requires >= 3.08."
   type        = string
-  default     = ""
-}
-
-variable "cluster_family" {
-  description = "The family of the DB cluster parameter group."
-  type        = string
-  default     = "aurora-mysql8.0"
+  default     = null
+  nullable    = true
 }
 
 variable "cluster_size" {

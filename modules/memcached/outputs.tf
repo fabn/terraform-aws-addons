@@ -1,12 +1,10 @@
 # Addon contract: `env` holds plaintext config vars, `sensitive_env` holds
-# credentials. MEMCACHIER_SERVERS is the Heroku-legacy var name kept for
-# config parity across deploy targets (same convention as the in-cluster
-# memcached addon of the formation module).
+# credentials.
 
 output "env" {
-  description = "Plaintext connection vars for the application cache store: comma-separated host:port list of every cache node."
+  description = "Plaintext connection vars for the application cache store: comma-separated memcached://host:port URL list of every cache node."
   value = {
-    MEMCACHIER_SERVERS = join(",", [for node in module.memcached.cluster_cache_nodes : "${node.address}:${node.port}"])
+    MEMCACHED_SERVER_URL = join(",", [for node in module.memcached.cluster_cache_nodes : "memcached://${node.address}:${node.port}"])
   }
 }
 

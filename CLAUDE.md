@@ -85,10 +85,10 @@ lefthook run validate-all
 ├── main.tf              # Root wrapper: addons map => submodule instances
 ├── variables.tf         # Input variables (addons map + shared network/lifecycle)
 ├── outputs.tf           # Merged env/sensitive_env + per-addon details
-├── versions.tf          # Provider requirements (aws ~> 6.0, random ~> 3.6)
+├── versions.tf          # Provider requirements (aws >= 6.54, random ~> 3.6)
 │
 ├── modules/             # Addon submodules
-│   ├── mysql/           # Aurora MySQL Serverless v2 (cloudposse/rds-cluster)
+│   ├── mysql/           # Aurora MySQL Serverless v2 (terraform-aws-modules/rds-aurora)
 │   ├── redis/           # ElastiCache Redis (terraform-aws-modules/elasticache)
 │   └── memcached/       # ElastiCache Memcached (terraform-aws-modules/elasticache)
 │
@@ -108,9 +108,9 @@ lefthook run validate-all
 - **Addons are separate modules, not core toggles**: addons have different
   lifecycles; per-environment addon swaps stay invisible to the rest of the
   stack.
-- **Built on battle-tested registry modules**: `cloudposse/rds-cluster` and
-  the official `terraform-aws-modules/elasticache` — this repo only adds the
-  addon contract, the sizes and opinionated defaults on top.
+- **Built on the official terraform-aws-modules**: `rds-aurora` and
+  `elasticache`, for a uniform syntax across addons — this repo only adds
+  the addon contract, the sizes and opinionated defaults on top.
 - **Heroku-style sizes**: every addon takes a nullable `size` preset
   (mini/small/medium/large); `size = null` + the addon-specific variable
   (`scaling` for mysql ACU ranges, `node` for cache node type/count) is the

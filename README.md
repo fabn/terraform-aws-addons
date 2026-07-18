@@ -109,9 +109,9 @@ Custom nodes: `size = null` +
 
 | Addon | Backed by | env | sensitive_env |
 |-----------|-----------|-----|---------------|
-| mysql | Aurora MySQL Serverless v2 ([cloudposse/rds-cluster](https://github.com/cloudposse/terraform-aws-rds-cluster)) | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_DATABASE` | `DATABASE_URL` (mysql2 scheme), `MYSQL_PASSWORD` |
+| mysql | Aurora MySQL Serverless v2 ([terraform-aws-modules/rds-aurora](https://github.com/terraform-aws-modules/terraform-aws-rds-aurora)) | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_DATABASE` | `DATABASE_URL` (mysql2 scheme), `MYSQL_PASSWORD` |
 | redis | ElastiCache Redis ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `REDIS_URL` | — |
-| memcached | ElastiCache Memcached ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `MEMCACHIER_SERVERS` | — |
+| memcached | ElastiCache Memcached ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `MEMCACHED_SERVER_URL` | — |
 
 ## Examples
 
@@ -124,8 +124,8 @@ Custom nodes: `size = null` +
 
 | Name | Version |
 |------|---------|
-| terraform | >= 1.9 |
-| aws | ~> 6.0 |
+| terraform | >= 1.11.1 |
+| aws | >= 6.54, < 7.0 |
 | random | ~> 3.6 |
 
 ## Development

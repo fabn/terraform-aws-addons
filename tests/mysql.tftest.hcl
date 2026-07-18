@@ -9,7 +9,7 @@ mock_provider "aws" {
   # The enhanced monitoring role embeds this document: the auto-generated
   # mock string would fail the provider's JSON policy validation.
   override_data {
-    target = module.cluster.data.aws_iam_policy_document.enhanced_monitoring
+    target = module.cluster.data.aws_iam_policy_document.monitoring_rds_assume_role
     values = {
       json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
     }
@@ -23,16 +23,16 @@ mock_provider "aws" {
       partition = "aws"
     }
   }
-}
-mock_provider "random" {
-  # The RDS instance identifier derives from random_pet: the auto-generated
-  # mock string may start with a digit, which the AWS provider rejects.
-  mock_resource "random_pet" {
+
+  # The cluster references the monitoring role by ARN: the auto-generated
+  # mock string would fail the provider's ARN validation.
+  mock_resource "aws_iam_role" {
     defaults = {
-      id = "mock-pet"
+      arn = "arn:aws:iam::123456789012:role/mock-monitoring"
     }
   }
 }
+mock_provider "random" {}
 
 run "default_size_is_mini" {
   command = apply
