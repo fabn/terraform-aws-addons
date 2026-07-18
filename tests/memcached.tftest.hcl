@@ -1,0 +1,82 @@
+# =============================================================================
+# Memcached Addon Tests
+# =============================================================================
+# Node addresses are computed by AWS, so with mocked providers
+# MEMCACHIER_SERVERS cannot be asserted literally — the e2e suite covers the
+# real endpoint; here the assertions target sizing and the contract shape.
+
+mock_provider "aws" {}
+mock_provider "random" {}
+
+run "default_size_is_mini" {
+  command = apply
+
+  module {
+    source = "./modules/memcached"
+  }
+
+  variables {
+    name       = "myapp-memcached"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.node.node_type == "cache.t4g.micro" && output.node.num_nodes == 1
+    error_message = "mini should resolve to a single cache.t4g.micro node"
+  }
+
+  assert {
+    condition     = can(output.env.MEMCACHIER_SERVERS)
+    error_message = "env contract should expose MEMCACHIER_SERVERS"
+  }
+
+  assert {
+    condition     = length(output.sensitive_env) == 0
+    error_message = "Memcached addon has no SASL: sensitive_env must be empty"
+  }
+}
+
+run "custom_node_replaces_size" {
+  command = apply
+
+  module {
+    source = "./modules/memcached"
+  }
+
+  variables {
+    name = "myapp-memcached"
+    size = null
+    node = {
+      node_type = "cache.m7g.xlarge"
+      num_nodes = 3
+    }
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.node.node_type == "cache.m7g.xlarge" && output.node.num_nodes == 3
+    error_message = "custom node should pass through untouched"
+  }
+}
+
+run "rejects_size_and_node_together" {
+  command = plan
+
+  module {
+    source = "./modules/memcached"
+  }
+
+  variables {
+    name = "myapp-memcached"
+    size = "small"
+    node = {
+      node_type = "cache.t4g.small"
+    }
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.size]
+}

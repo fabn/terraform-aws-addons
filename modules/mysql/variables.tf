@@ -1,0 +1,116 @@
+variable "name" {
+  description = "Cluster identifier and base name for dependent resources (e.g. `myapp-staging-mysql`)."
+  type        = string
+}
+
+variable "size" {
+  description = "Heroku-style preset size (mini, small, medium, large) mapped to Serverless v2 ACU ranges; mini/small scale to zero. Set to null and pass `scaling` for custom capacity."
+  type        = string
+  default     = "mini"
+  nullable    = true
+
+  validation {
+    condition     = var.size == null ? true : contains(["mini", "small", "medium", "large"], var.size)
+    error_message = "size must be one of: mini, small, medium, large (or null when scaling is set)."
+  }
+
+  validation {
+    condition     = (var.size == null) != (var.scaling == null)
+    error_message = "Exactly one of size or scaling must be set: pass size = null when using custom scaling."
+  }
+}
+
+variable "scaling" {
+  description = "Custom Serverless v2 capacity range, alternative to `size`. min_capacity = 0 enables scale-to-zero (auto-pause after seconds_until_auto_pause)."
+  type = object({
+    min_capacity             = number
+    max_capacity             = number
+    seconds_until_auto_pause = optional(number)
+  })
+  default  = null
+  nullable = true
+
+  validation {
+    condition     = var.scaling == null ? true : (var.scaling.seconds_until_auto_pause == null || var.scaling.min_capacity == 0)
+    error_message = "seconds_until_auto_pause requires min_capacity = 0 (auto-pause only applies to clusters that scale to zero)."
+  }
+}
+
+variable "database" {
+  description = "Name of the database to create. Defaults to var.name with hyphens replaced by underscores."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "username" {
+  description = "Master username the application connects with."
+  type        = string
+  default     = "app"
+  # Callers (the root wrapper) may forward null to mean "use the default".
+  nullable = false
+}
+
+variable "engine_version" {
+  description = "Aurora MySQL engine version. Empty string lets AWS pick the default for the family. Scale-to-zero requires >= 3.08."
+  type        = string
+  default     = ""
+}
+
+variable "cluster_family" {
+  description = "The family of the DB cluster parameter group."
+  type        = string
+  default     = "aurora-mysql8.0"
+}
+
+variable "cluster_size" {
+  description = "Number of instances in the cluster: the first is the writer, every extra one a reader replica."
+  type        = number
+  default     = 1
+}
+
+variable "vpc_id" {
+  description = "VPC where the cluster is created."
+  type        = string
+}
+
+variable "subnet_ids" {
+  description = "Subnets for the DB subnet group (private subnets spanning at least two AZs)."
+  type        = list(string)
+}
+
+variable "allowed_cidr_blocks" {
+  description = "CIDR blocks allowed to reach the cluster."
+  type        = list(string)
+  default     = []
+}
+
+variable "allowed_security_group_ids" {
+  description = "Security groups allowed to reach the cluster."
+  type        = list(string)
+  default     = []
+}
+
+variable "monitoring_enabled" {
+  description = "Enable enhanced monitoring and performance/database insights. Disable for ephemeral environments."
+  type        = bool
+  default     = true
+}
+
+variable "deletion_protection" {
+  description = "Protect the cluster from deletion. Disable for ephemeral environments."
+  type        = bool
+  default     = true
+}
+
+variable "skip_final_snapshot" {
+  description = "Skip the final snapshot on destroy. Enable for ephemeral environments."
+  type        = bool
+  default     = false
+}
+
+variable "tags" {
+  description = "Additional tags applied to all resources."
+  type        = map(string)
+  default     = {}
+}
