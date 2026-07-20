@@ -1,10 +1,17 @@
 # Addon contract: `env` holds plaintext config vars, `sensitive_env` holds
 # credentials.
-
+#
+# MEMCACHED_SERVERS is a plain host:port server list, deliberately NOT a
+# `memcached://…` URL: memcached clients (dalli et al.) parse a host:port list,
+# not a URI scheme — unlike redis:// / postgresql:// whose clients do parse the
+# scheme, so prefixing one here would only force the app to strip it. This
+# matches the MemCachier/Heroku server-list convention and the in-cluster
+# memcached addon of fabn/formation/kubernetes, so an in-cluster / managed swap
+# stays invisible to the app.
 output "env" {
-  description = "Plaintext connection vars for the application cache store: comma-separated memcached://host:port URL list of every cache node."
+  description = "Plaintext connection vars for the application cache store: comma-separated host:port server list of every cache node."
   value = {
-    MEMCACHED_SERVER_URL = join(",", [for node in module.memcached.cluster_cache_nodes : "memcached://${node.address}:${node.port}"])
+    MEMCACHED_SERVERS = join(",", [for node in module.memcached.cluster_cache_nodes : "${node.address}:${node.port}"])
   }
 }
 

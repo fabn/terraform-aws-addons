@@ -198,7 +198,7 @@ use the submodules directly — mysql/postgres take
 | mysql | Aurora MySQL Serverless v2 ([terraform-aws-modules/rds-aurora](https://github.com/terraform-aws-modules/terraform-aws-rds-aurora)) | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_DATABASE` | `DATABASE_URL` (mysql2 scheme), `MYSQL_PASSWORD` |
 | postgres | Aurora PostgreSQL Serverless v2 ([terraform-aws-modules/rds-aurora](https://github.com/terraform-aws-modules/terraform-aws-rds-aurora)) | `PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE` | `DATABASE_URL` (postgresql scheme), `PGPASSWORD` |
 | redis | ElastiCache Redis / Valkey ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `REDIS_URL` | — |
-| memcached | ElastiCache Memcached ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `MEMCACHED_SERVER_URL` | — |
+| memcached | ElastiCache Memcached ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `MEMCACHED_SERVERS` (comma-separated `host:port` list) | — |
 
 ## Examples
 
