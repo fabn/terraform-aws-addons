@@ -20,8 +20,8 @@ run "provisions_the_stack" {
   }
 
   assert {
-    condition     = startswith(output.env.MEMCACHED_SERVER_URL, "memcached://") && endswith(output.env.MEMCACHED_SERVER_URL, ":11211")
-    error_message = "MEMCACHED_SERVER_URL should list the memcached node URL(s)"
+    condition     = endswith(output.env.MEMCACHED_SERVERS, ":11211") && !strcontains(output.env.MEMCACHED_SERVERS, "://")
+    error_message = "MEMCACHED_SERVERS should be a scheme-less host:port node list"
   }
 
   assert {

@@ -2,7 +2,7 @@
 # Memcached Addon Tests
 # =============================================================================
 # Node addresses are computed by AWS, so with mocked providers
-# MEMCACHED_SERVER_URL cannot be asserted literally — the e2e suite covers the
+# MEMCACHED_SERVERS cannot be asserted literally — the e2e suite covers the
 # real endpoint; here the assertions target sizing and the contract shape.
 
 mock_provider "aws" {}
@@ -27,8 +27,8 @@ run "default_size_is_mini" {
   }
 
   assert {
-    condition     = can(output.env.MEMCACHED_SERVER_URL)
-    error_message = "env contract should expose MEMCACHED_SERVER_URL"
+    condition     = can(output.env.MEMCACHED_SERVERS)
+    error_message = "env contract should expose MEMCACHED_SERVERS"
   }
 
   assert {

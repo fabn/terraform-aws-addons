@@ -27,7 +27,7 @@ run "deploys_declared_addons_and_merges_env" {
   }
 
   assert {
-    condition     = !can(output.env.MEMCACHED_SERVER_URL)
+    condition     = !can(output.env.MEMCACHED_SERVERS)
     error_message = "merged env should not contain vars from disabled addons"
   }
 

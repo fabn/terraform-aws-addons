@@ -21,7 +21,7 @@ variable "size" {
 }
 
 variable "node" {
-  description = "Custom node configuration, alternative to `size`. Multi-node clusters are spread cross-AZ; clients see every node through MEMCACHED_SERVER_URL."
+  description = "Custom node configuration, alternative to `size`. Multi-node clusters are spread cross-AZ; clients see every node through MEMCACHED_SERVERS."
   type = object({
     node_type = string
     num_nodes = optional(number, 1)
