@@ -78,7 +78,7 @@ run "default_size_is_mini" {
   }
 
   assert {
-    condition     = output.sensitive_env.MYSQL_PASSWORD == random_password.admin.result
+    condition     = output.sensitive_env.MYSQL_PASSWORD == one(random_password.admin[*].result)
     error_message = "MYSQL_PASSWORD should be the generated password"
   }
 }
@@ -154,8 +154,8 @@ run "slow_query_log_opt_out" {
   }
 
   assert {
-    condition     = can(output.env.MYSQL_HOST)
-    error_message = "opting out of the slow query log should not create the parameter group path"
+    condition     = length(output.cluster_parameters) == 0
+    error_message = "opting out of the slow query log with no extra parameters should leave the group uncreated"
   }
 }
 
@@ -301,4 +301,90 @@ run "rejects_malformed_backup_window" {
   }
 
   expect_failures = [var.preferred_backup_window]
+}
+
+run "extra_cluster_parameters_merge_with_the_managed_ones" {
+  command = apply
+
+  module {
+    source = "./modules/mysql"
+  }
+
+  variables {
+    name       = "myapp-mysql"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    cluster_parameters = [
+      { name = "gtid_mode", value = "ON", apply_method = "pending-reboot" },
+      { name = "enforce_gtid_consistency", value = "ON", apply_method = "pending-reboot" },
+    ]
+  }
+
+  assert {
+    condition     = length(output.cluster_parameters) == 5
+    error_message = "extra parameters should be appended to the three the slow query log contributes"
+  }
+
+  assert {
+    condition = anytrue([
+      for p in output.cluster_parameters :
+      p.name == "gtid_mode" && p.value == "ON" && p.apply_method == "pending-reboot"
+    ])
+    error_message = "a caller's parameter should keep its apply_method"
+  }
+}
+
+run "extra_cluster_parameters_stand_alone" {
+  command = apply
+
+  module {
+    source = "./modules/mysql"
+  }
+
+  variables {
+    name           = "myapp-mysql"
+    slow_query_log = false
+    vpc_id         = "vpc-12345"
+    subnet_ids     = ["subnet-1", "subnet-2"]
+    cluster_parameters = [
+      { name = "gtid_mode", value = "ON", apply_method = "pending-reboot" },
+    ]
+  }
+
+  assert {
+    condition     = length(output.cluster_parameters) == 1
+    error_message = "the group should still be created for a caller's parameters with the slow query log off"
+  }
+}
+
+run "managed_master_password_withholds_the_credentials" {
+  command = apply
+
+  module {
+    source = "./modules/mysql"
+  }
+
+  variables {
+    name                        = "myapp-mysql"
+    vpc_id                      = "vpc-12345"
+    subnet_ids                  = ["subnet-1", "subnet-2"]
+    manage_master_user_password = true
+  }
+
+  # Not a degraded contract but an accurate one: RDS holds the password, so
+  # there is nothing to compose a URL from.
+  assert {
+    condition     = length(output.sensitive_env) == 0
+    error_message = "sensitive_env should be empty when RDS owns the master password"
+  }
+
+  assert {
+    condition     = length(random_password.admin) == 0
+    error_message = "no password should be generated when RDS owns it"
+  }
+
+  assert {
+    condition     = output.env.MYSQL_USER == "app"
+    error_message = "the plaintext env contract should be unaffected"
+  }
 }
