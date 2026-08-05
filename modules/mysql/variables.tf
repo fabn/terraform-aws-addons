@@ -73,9 +73,61 @@ variable "long_query_time" {
 }
 
 variable "cluster_family" {
-  description = "DB cluster parameter group family, must match engine_version. Only used when slow_query_log is enabled."
+  description = "DB cluster parameter group family, must match engine_version. Only used when a cluster parameter group is created."
   type        = string
   default     = "aurora-mysql8.0"
+  nullable    = false
+}
+
+# Engine settings the addon does not model. The slow query log is a first-class
+# option because every stack wants it; anything else a caller needs goes here
+# rather than growing a boolean per parameter.
+#
+# apply_method is the caller's call and it matters. A dynamic parameter takes
+# effect immediately; a static one needs "pending-reboot" and, as the name says,
+# a reboot before it applies. Passing a static parameter without it fails the
+# apply rather than silently doing nothing, which is the better of the two.
+#
+# Two are worth knowing about before reaching for them. binlog_format turns the
+# cluster into a binary log source, and the resulting activity stops a
+# scale-to-zero cluster from ever pausing. gtid_mode and
+# enforce_gtid_consistency are static, and are what a cluster needs in order to
+# replicate from an external MySQL server.
+variable "cluster_parameters" {
+  description = "Extra DB cluster parameters, merged with the ones the addon manages itself."
+  type = list(object({
+    name         = string
+    value        = string
+    apply_method = optional(string)
+  }))
+  default  = []
+  nullable = false
+}
+
+# Off by default, and that default is the addon contract rather than a
+# preference: with the password generated here, `sensitive_env` can hand the
+# application a ready DATABASE_URL. Turn this on and Terraform never sees the
+# password — RDS generates it, keeps it in Secrets Manager and can rotate it —
+# so DATABASE_URL and MYSQL_PASSWORD leave `sensitive_env`, and the secret's ARN
+# is published instead.
+#
+# Worth it when the master user is an administrative account rather than the one
+# the application connects as: nothing needs a URL composed from it, and the
+# credential stops living in Terraform state.
+variable "manage_master_user_password" {
+  description = "Let RDS generate and store the master password in Secrets Manager instead of generating it here."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+# The Data API: an HTTPS endpoint for running SQL without a route into the VPC,
+# and what the console's query editor is built on. Availability varies by region
+# and engine version, so an apply is the only reliable check.
+variable "enable_http_endpoint" {
+  description = "Enable the RDS Data API on the cluster, allowing SQL over HTTPS from outside the VPC."
+  type        = bool
+  default     = false
   nullable    = false
 }
 

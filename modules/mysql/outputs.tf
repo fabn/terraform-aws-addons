@@ -12,13 +12,26 @@ output "env" {
   }
 }
 
+# Empty when RDS manages the master password, and that is the honest answer
+# rather than a degraded one: Terraform never learns the value, so there is no
+# URL to compose and no password to hand over. A caller in that mode reads
+# `master_user_secret_arn` and resolves the credential itself — which is the
+# reason to ask for that mode in the first place.
 output "sensitive_env" {
-  description = "Credential vars (DATABASE_URL uses the mysql2 scheme expected by the Rails mysql2 adapter)."
+  description = "Credential vars (DATABASE_URL uses the mysql2 scheme expected by the Rails mysql2 adapter). Empty when manage_master_user_password is set."
   sensitive   = true
-  value = {
-    DATABASE_URL   = "mysql2://${var.username}:${random_password.admin.result}@${module.cluster.cluster_endpoint}:3306/${local.database}"
-    MYSQL_PASSWORD = random_password.admin.result
-  }
+  # tomap on both branches so the output keeps one type. A bare `{}` against a
+  # populated object leaves Terraform unifying two different object types, which
+  # surfaces as a type error in the caller rather than here.
+  value = var.manage_master_user_password ? tomap({}) : tomap({
+    DATABASE_URL   = "mysql2://${var.username}:${one(random_password.admin[*].result)}@${module.cluster.cluster_endpoint}:3306/${local.database}"
+    MYSQL_PASSWORD = one(random_password.admin[*].result)
+  })
+}
+
+output "master_user_secret_arn" {
+  description = "Secrets Manager secret holding the master credentials; null unless manage_master_user_password is set."
+  value       = try(module.cluster.cluster_master_user_secret[0].secret_arn, null)
 }
 
 output "host" {
@@ -64,4 +77,9 @@ output "preferred_maintenance_window" {
 output "preferred_backup_window" {
   description = "Daily UTC automated-backup window (null when AWS picks a random one)."
   value       = var.preferred_backup_window
+}
+
+output "cluster_parameters" {
+  description = "Resolved DB cluster parameters — the addon's own plus anything passed in `cluster_parameters`."
+  value       = local.cluster_parameters
 }

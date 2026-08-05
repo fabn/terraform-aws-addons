@@ -19,6 +19,22 @@ locals {
   # MySQL schema names cannot contain hyphens, cluster names can.
   database = coalesce(var.database, replace(var.name, "-", "_"))
 
+  # The addon's own parameters first, the caller's after, so a caller can
+  # override one of ours by restating it — last write wins in the parameter
+  # group, and the alternative would be a silent duplicate.
+  cluster_parameters = concat(
+    !var.slow_query_log ? [] : [
+      { name = "slow_query_log", value = "1", apply_method = null },
+      { name = "long_query_time", value = tostring(var.long_query_time), apply_method = null },
+      { name = "log_output", value = "FILE", apply_method = null },
+    ],
+    [for p in var.cluster_parameters : {
+      name         = p.name
+      value        = p.value
+      apply_method = p.apply_method
+    }],
+  )
+
   security_group_ingress_rules = merge(
     { for i, cidr in var.allowed_cidr_blocks :
     "cidr_${i}" => { description = "MySQL from ${cidr}", cidr_ipv4 = cidr } },
@@ -27,7 +43,12 @@ locals {
   )
 }
 
+# Not created when RDS manages the master password: there would be nothing to do
+# with the value, and generating a credential nobody uses is worse than not
+# generating one.
 resource "random_password" "admin" {
+  count = var.manage_master_user_password ? 0 : 1
+
   length = 32
   # No special characters so DATABASE_URL needs no percent-encoding.
   special = false
@@ -55,12 +76,16 @@ module "cluster" {
   } }
 
   database_name = local.database
-  # The password stays out of the cluster state (write-only argument); the
-  # generated random_password holds the value the outputs compose.
+  # Two ways to hold the master credential, and the choice belongs to the caller
+  # (see var.manage_master_user_password). Generated here, the password stays out
+  # of the cluster state through the write-only argument and the random_password
+  # holds the value the outputs compose. Managed by RDS, none of that applies —
+  # the password is minted, stored and rotated on the service side, and Terraform
+  # never learns it.
   master_username             = var.username
-  manage_master_user_password = false
-  master_password_wo          = random_password.admin.result
-  master_password_wo_version  = 1
+  manage_master_user_password = var.manage_master_user_password
+  master_password_wo          = one(random_password.admin[*].result)
+  master_password_wo_version  = var.manage_master_user_password ? null : 1
 
   # Network: private subnets only, access granted to explicit peers.
   create_db_subnet_group       = true
@@ -74,20 +99,18 @@ module "cluster" {
   cluster_monitoring_interval = var.monitoring_enabled ? 60 : 0
   database_insights_mode      = var.monitoring_enabled ? "standard" : null
 
-  # Slow query log: enabled through a dedicated cluster parameter group and
-  # exported to CloudWatch (log group created here so retention is managed).
-  # Only dynamic parameters belong in this group — nothing like
-  # binlog_format, which would keep a scale-to-0 cluster from ever pausing.
+  # Slow query log: enabled through the cluster parameter group and exported to
+  # CloudWatch (log group created here so retention is managed). The group is
+  # shared with whatever the caller passes in var.cluster_parameters, so it also
+  # exists when the slow query log is off but extra parameters are not.
   enabled_cloudwatch_logs_exports = var.slow_query_log ? ["slowquery"] : []
   create_cloudwatch_log_group     = var.slow_query_log
-  cluster_parameter_group = !var.slow_query_log ? null : {
-    family = var.cluster_family
-    parameters = [
-      { name = "slow_query_log", value = "1" },
-      { name = "long_query_time", value = tostring(var.long_query_time) },
-      { name = "log_output", value = "FILE" },
-    ]
+  cluster_parameter_group = length(local.cluster_parameters) == 0 ? null : {
+    family     = var.cluster_family
+    parameters = local.cluster_parameters
   }
+
+  enable_http_endpoint = var.enable_http_endpoint
 
   # Explicit params
   apply_immediately       = true

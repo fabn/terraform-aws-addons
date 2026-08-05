@@ -191,6 +191,41 @@ use the submodules directly — mysql/postgres take
 `maintenance_window` + `snapshot_window`, memcached takes
 `maintenance_window`.
 
+### Beyond an app-stack addon (mysql)
+
+Three options the root wrapper does not expose, for callers using
+`modules/mysql` directly as a database rather than as a stack addon.
+
+**Extra engine parameters.** `cluster_parameters` is merged into the same
+cluster parameter group the slow query log uses, and the group is created for
+them even with `slow_query_log = false`. `apply_method` is yours to set: a
+static parameter needs `"pending-reboot"` and a reboot before it takes effect,
+and omitting it fails the apply rather than doing nothing quietly.
+
+```hcl
+cluster_parameters = [
+  { name = "gtid_mode", value = "ON", apply_method = "pending-reboot" },
+  { name = "enforce_gtid_consistency", value = "ON", apply_method = "pending-reboot" },
+]
+```
+
+Two to know before reaching for them: `binlog_format` makes the cluster a
+binary log source and the resulting activity stops a scale-to-zero cluster from
+ever pausing; the two above are what a cluster needs to replicate from an
+external MySQL server.
+
+**An RDS-managed master password.** `manage_master_user_password = true` hands
+the credential to RDS — minted, stored in Secrets Manager and rotatable — so
+Terraform never learns it. `sensitive_env` is then empty, because there is no
+password to compose a `DATABASE_URL` from, and `master_user_secret_arn` is
+published instead. Right when the master user administers the database rather
+than being the account the application connects as; wrong for an app stack,
+which is why it is off by default.
+
+**The Data API.** `enable_http_endpoint = true` allows SQL over HTTPS with no
+route into the VPC, and backs the console's query editor. Availability varies
+by region and engine version, so an apply is the only reliable check.
+
 ### Addons
 
 | Addon | Backed by | env | sensitive_env |
