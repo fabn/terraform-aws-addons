@@ -16,6 +16,11 @@ locals {
   }
 
   scaling = var.size != null ? local.sizes[var.size] : var.scaling
+
+  # Each falls back to the old single flag, so callers that never set them keep
+  # exactly the behaviour they had.
+  enhanced_monitoring  = coalesce(var.enhanced_monitoring, var.monitoring_enabled)
+  performance_insights = coalesce(var.performance_insights, var.monitoring_enabled)
   # MySQL schema names cannot contain hyphens, cluster names can.
   database = coalesce(var.database, replace(var.name, "-", "_"))
 
@@ -71,8 +76,8 @@ module "cluster" {
   # First instance is the writer, every extra one is a reader replica.
   # Performance insights is an instance-level setting on Aurora.
   instances = { for i in range(1 + var.replicas) : tostring(i + 1) => {
-    performance_insights_enabled          = var.monitoring_enabled
-    performance_insights_retention_period = var.monitoring_enabled ? 7 : null
+    performance_insights_enabled          = local.performance_insights
+    performance_insights_retention_period = local.performance_insights ? 7 : null
   } }
 
   database_name = local.database
@@ -95,9 +100,12 @@ module "cluster" {
 
   # Monitoring: enhanced monitoring + database insights (performance
   # insights is per instance, see the instances map).
-  create_monitoring_role      = var.monitoring_enabled
-  cluster_monitoring_interval = var.monitoring_enabled ? 60 : 0
-  database_insights_mode      = var.monitoring_enabled ? "standard" : null
+  # The role and the interval are the enhanced-monitoring half. database_insights
+  # rides with Performance Insights: it is the console layer over the same data
+  # and needs no role either.
+  create_monitoring_role      = local.enhanced_monitoring
+  cluster_monitoring_interval = local.enhanced_monitoring ? 60 : 0
+  database_insights_mode      = local.performance_insights ? "standard" : null
 
   # Slow query log: enabled through the cluster parameter group and exported to
   # CloudWatch (log group created here so retention is managed). The group is
