@@ -275,6 +275,66 @@ connection never establishes, and `SHOW REPLICA STATUS` reports
 route into the VPC, and backs the console's query editor. Availability varies
 by region and engine version, so an apply is the only reliable check.
 
+### Cloning a SQL addon from an existing cluster (mysql / postgres)
+
+Both SQL submodules can create the cluster as a copy of an existing one instead
+of an empty database. An Aurora clone is copy-on-write against the source's
+storage layer: it is ready in minutes largely regardless of database size, and
+billed only for the pages it changes — which is what makes a per-PR or
+per-environment database seeded from production-like data practical at all.
+
+```hcl
+module "review_app_db" {
+  source  = "fabn/addons/aws//modules/postgres"
+
+  name       = "myapp-pr-1234"
+  clone_from = { source_cluster_identifier = "myapp-staging-postgres" }
+
+  # The clone's own users and schemas came from the source, so name them.
+  database        = "myapp_staging"
+  username        = "app"
+  master_password = var.source_master_password
+
+  vpc_id     = var.vpc_id
+  subnet_ids = var.subnet_ids
+}
+```
+
+`clone_from` defaults to a `copy-on-write` clone of the source's latest
+restorable time — the two settings that make it a clone rather than a restore.
+Pin `restore_to_time` for a fixed point instead, or `restore_type =
+"full-copy"` for a real copy that costs full storage. Name the source with
+either `source_cluster_identifier` or `source_cluster_resource_id`, not both.
+`snapshot_identifier` is the sibling for restoring a snapshot; it is mutually
+exclusive with `clone_from`.
+
+**A clone inherits its credentials.** The master user, its password and every
+schema come from the source, and RDS neither accepts nor generates a password
+at restore time. So the addon generates nothing, and `database` / `username`
+stop describing what it creates and start describing what it found — pass the
+source's, or the connection vars will point at a database that isn't there.
+Pass `master_password` too and `sensitive_env` composes `DATABASE_URL` exactly
+as it does for an empty cluster; omit it and `sensitive_env` is empty, the same
+answer the addon gives when RDS owns the password. `manage_master_user_password`
+is rejected in this mode, since there would be nothing for RDS to manage.
+
+**A clone is not a replica.** It has no inbound replication, so nothing keeps
+the writer busy and the scale-to-zero sizes work here exactly as on an empty
+cluster — `size = "mini"` (the default) still auto-pauses. That makes idle
+review-app databases close to free.
+
+Two limits worth knowing before cloning in a loop:
+
+- AWS allows **fifteen copy-on-write clones per source cluster**. The sixteenth
+  does not fail — it silently becomes a full copy, same API call, entirely
+  different time and bill. Nothing here can detect that at plan time, so a
+  caller creating clones in a loop should cap them itself.
+- A cluster's lineage is fixed at creation. Pointing `clone_from` at a
+  different source later **replaces** the cluster rather than re-cloning it.
+
+`restored_from` reports the resolved mode and source (`null` for an empty
+cluster), since the restore arguments themselves cannot be read back.
+
 ### Addons
 
 | Addon | Backed by | env | sensitive_env |

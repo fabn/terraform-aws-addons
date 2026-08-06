@@ -20,6 +20,30 @@ locals {
   # MySQL schema names cannot contain hyphens, cluster names can.
   database = coalesce(var.database, replace(var.name, "-", "_"))
 
+  # A restored cluster arrives with the source's users, schemas and master
+  # password already in it. Everything the addon would otherwise create — the
+  # database, the master user, its password — is inherited, so the addon stops
+  # asking for it: RDS rejects those arguments on a restore rather than
+  # applying them.
+  restored = var.clone_from != null || var.snapshot_identifier != null
+
+  # The password `sensitive_env` publishes: generated here for an empty
+  # cluster, the source's (as supplied by the caller) for a restored one, and
+  # null when nobody here knows it — RDS-managed, or a restore whose caller
+  # did not pass one.
+  password = local.restored ? var.master_password : one(random_password.admin[*].result)
+
+  # use_latest_restorable_time is what makes the clone track the source, so it
+  # is the default unless the caller pinned a timestamp — AWS takes one or the
+  # other, never both.
+  clone_from = var.clone_from == null ? null : {
+    source_cluster_identifier  = var.clone_from.source_cluster_identifier
+    source_cluster_resource_id = var.clone_from.source_cluster_resource_id
+    restore_to_time            = var.clone_from.restore_to_time
+    restore_type               = coalesce(var.clone_from.restore_type, "copy-on-write")
+    use_latest_restorable_time = var.clone_from.restore_to_time != null ? null : true
+  }
+
   # The addon's own parameters first, the caller's after, so a caller can
   # override one of ours by restating it — last write wins in the parameter
   # group, and the alternative would be a silent duplicate.
@@ -82,7 +106,7 @@ locals {
 # with the value, and generating a credential nobody uses is worse than not
 # generating one.
 resource "random_password" "admin" {
-  count = var.manage_master_user_password ? 0 : 1
+  count = var.manage_master_user_password || local.restored ? 0 : 1
 
   length = 32
   # No special characters so DATABASE_URL needs no percent-encoding.
@@ -110,17 +134,30 @@ module "cluster" {
     performance_insights_retention_period = var.performance_insights ? 7 : null
   } }
 
-  database_name = local.database
-  # Two ways to hold the master credential, and the choice belongs to the caller
-  # (see var.manage_master_user_password). Generated here, the password stays out
-  # of the cluster state through the write-only argument and the random_password
-  # holds the value the outputs compose. Managed by RDS, none of that applies —
-  # the password is minted, stored and rotated on the service side, and Terraform
-  # never learns it.
-  master_username             = var.username
+  # Null on a restore: the schema comes from the source, and naming a
+  # different one here is a change RDS cannot make (the argument forces a new
+  # cluster rather than renaming anything).
+  database_name = local.restored ? null : local.database
+  # Three ways to hold the master credential. Generated here, the password stays
+  # out of the cluster state through the write-only argument and the
+  # random_password holds the value the outputs compose. Managed by RDS, none of
+  # that applies — the password is minted, stored and rotated on the service
+  # side, and Terraform never learns it. The choice between those two belongs to
+  # the caller (see var.manage_master_user_password).
+  #
+  # Restored, there is no choice to make: the master user and its password come
+  # from the source, so both arguments go null and the provider reads back what
+  # the cluster actually came up with.
+  master_username             = local.restored ? null : var.username
   manage_master_user_password = var.manage_master_user_password
   master_password_wo          = one(random_password.admin[*].result)
-  master_password_wo_version  = var.manage_master_user_password ? null : 1
+  master_password_wo_version  = var.manage_master_user_password || local.restored ? null : 1
+
+  # Cloning / restoring. Mutually exclusive (enforced on the variables), and
+  # both fix the cluster's lineage at creation: changing either later replaces
+  # the cluster.
+  restore_to_point_in_time = local.clone_from
+  snapshot_identifier      = var.snapshot_identifier
 
   # Network: private subnets only, access granted to explicit peers.
   create_db_subnet_group       = true
