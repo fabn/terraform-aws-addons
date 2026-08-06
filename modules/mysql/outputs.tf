@@ -83,3 +83,11 @@ output "cluster_parameters" {
   description = "Resolved DB cluster parameters — the addon's own plus anything passed in `cluster_parameters`."
   value       = local.cluster_parameters
 }
+
+output "monitoring" {
+  description = "Resolved monitoring flags — enhanced monitoring needs an IAM role, Performance Insights does not."
+  value = {
+    enhanced_monitoring  = var.enhanced_monitoring
+    performance_insights = var.performance_insights
+  }
+}

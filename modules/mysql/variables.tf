@@ -196,10 +196,26 @@ variable "allowed_security_group_ids" {
   default     = []
 }
 
-variable "monitoring_enabled" {
-  description = "Enable enhanced monitoring and performance/database insights. Disable for ephemeral environments."
+# Two features, two variables, because they do not share prerequisites. Enhanced
+# monitoring collects OS-level metrics through an agent and creates an IAM role;
+# Performance Insights is enabled on the instance and needs no role at all.
+#
+# One flag for both meant a caller whose principal cannot create IAM roles — a
+# routine restriction for a role granted across accounts — had to give up query
+# visibility for a permission only the OS metrics ever needed. Worse, the plan
+# says nothing: it applies cleanly until it reaches the role.
+variable "enhanced_monitoring" {
+  description = "OS-level metrics through the RDS monitoring agent. Creates an IAM role, so the caller must be allowed to create one."
   type        = bool
   default     = true
+  nullable    = false
+}
+
+variable "performance_insights" {
+  description = "Query-level load analysis and database insights. Enabled on the instance, needs no IAM role."
+  type        = bool
+  default     = true
+  nullable    = false
 }
 
 variable "deletion_protection" {
