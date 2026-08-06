@@ -27,7 +27,16 @@ locals {
     !var.slow_query_log ? [] : [
       { name = "slow_query_log", value = "1", apply_method = null },
       { name = "long_query_time", value = tostring(var.long_query_time), apply_method = null },
-      { name = "log_output", value = "FILE", apply_method = null },
+      # pending-reboot, unlike its two neighbours, and not because the parameter
+      # is static — it is dynamic. AWS reports `log_output` with Source "system"
+      # on aurora-mysql8.0 and never records it as user-set: it does not appear
+      # in the family's engine defaults at all, and its value is already FILE.
+      #
+      # So the write is accepted and discarded. A null apply_method makes the
+      # provider send "immediate", the next refresh reads back the system value's
+      # "pending-reboot", and the diff returns after every single apply — value
+      # unchanged, forever. Matching what AWS reports is what ends the loop.
+      { name = "log_output", value = "FILE", apply_method = "pending-reboot" },
     ],
     [for p in var.cluster_parameters : {
       name         = p.name
