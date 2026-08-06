@@ -36,6 +36,11 @@ locals {
     }],
   )
 
+  security_group_egress_rules = {
+    for i, cidr in var.egress_cidr_blocks :
+    "cidr_${i}" => { description = "Outbound to ${cidr}", cidr_ipv4 = cidr, ip_protocol = "-1" }
+  }
+
   security_group_ingress_rules = merge(
     { for i, cidr in var.allowed_cidr_blocks :
     "cidr_${i}" => { description = "MySQL from ${cidr}", cidr_ipv4 = cidr } },
@@ -93,6 +98,7 @@ module "cluster" {
   subnets                      = var.subnet_ids
   vpc_id                       = var.vpc_id
   security_group_ingress_rules = local.security_group_ingress_rules
+  security_group_egress_rules  = local.security_group_egress_rules
 
   # Monitoring: enhanced monitoring + database insights (performance
   # insights is per instance, see the instances map).

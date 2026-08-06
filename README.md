@@ -264,6 +264,13 @@ first to `false` when the Terraform principal is not allowed to create IAM
 roles — a routine restriction for a role granted across accounts — and keep
 query visibility that a single flag would have taken with it.
 
+**Outbound access.** `egress_cidr_blocks` opens the security group for
+connections the cluster *initiates*. Empty by default, which is right for a
+database — but required when it replicates from a source outside the VPC, since
+replication is outbound: the writer dials the source. With no egress rule the
+connection never establishes, and `SHOW REPLICA STATUS` reports
+`Can't connect to MySQL server` as though the source were down.
+
 **The Data API.** `enable_http_endpoint = true` allows SQL over HTTPS with no
 route into the VPC, and backs the console's query editor. Availability varies
 by region and engine version, so an apply is the only reliable check.

@@ -461,3 +461,44 @@ run "modifications_can_be_deferred_to_the_maintenance_window" {
     error_message = "deferred changes should land in the addon's off-peak maintenance window"
   }
 }
+
+run "egress_is_closed_unless_asked_for" {
+  command = apply
+
+  module {
+    source = "./modules/mysql"
+  }
+
+  variables {
+    name       = "myapp-mysql"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = length(output.egress_rules) == 0
+    error_message = "a database should have no outbound access by default"
+  }
+}
+
+run "egress_opens_for_a_cluster_that_replicates_outward" {
+  command = apply
+
+  module {
+    source = "./modules/mysql"
+  }
+
+  variables {
+    name               = "myapp-mysql"
+    vpc_id             = "vpc-12345"
+    subnet_ids         = ["subnet-1", "subnet-2"]
+    egress_cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Replication is outbound: the writer dials the source. Without this the
+  # connection never establishes and SHOW REPLICA STATUS blames the source.
+  assert {
+    condition     = length(output.egress_rules) == 1
+    error_message = "an egress CIDR should produce an egress rule"
+  }
+}
