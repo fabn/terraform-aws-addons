@@ -302,3 +302,49 @@ run "rejects_malformed_backup_window" {
 
   expect_failures = [var.preferred_backup_window]
 }
+
+run "applies_modifications_immediately_by_default" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name       = "myapp-postgres"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.apply_immediately
+    error_message = "an addon should apply changes on the next apply unless told otherwise"
+  }
+}
+
+run "modifications_can_be_deferred_to_the_maintenance_window" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name              = "myapp-postgres"
+    apply_immediately = false
+    vpc_id            = "vpc-12345"
+    subnet_ids        = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = !output.apply_immediately
+    error_message = "disruptive changes should be deferrable to the maintenance window"
+  }
+
+  # Deferring is only meaningful against a known window, which stays the
+  # addon's own default rather than something the caller has to remember.
+  assert {
+    condition     = output.preferred_maintenance_window == "mon:03:00-mon:04:00"
+    error_message = "deferred changes should land in the addon's off-peak maintenance window"
+  }
+}

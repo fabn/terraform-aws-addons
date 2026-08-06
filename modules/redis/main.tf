@@ -84,7 +84,7 @@ module "redis" {
   # Weekly maintenance window (UTC); null lets AWS pick a random window.
   maintenance_window = var.maintenance_window
 
-  apply_immediately = true
+  apply_immediately = var.apply_immediately
 
   # Network: subnet group on private subnets, dedicated security group with
   # ingress limited to the declared peers.

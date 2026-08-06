@@ -42,6 +42,7 @@ module "mysql" {
 
   preferred_maintenance_window = var.maintenance_window
   preferred_backup_window      = var.backup_window
+  apply_immediately            = var.apply_immediately
 
   tags = var.tags
 }
@@ -73,6 +74,7 @@ module "postgres" {
 
   preferred_maintenance_window = var.maintenance_window
   preferred_backup_window      = var.backup_window
+  apply_immediately            = var.apply_immediately
 
   tags = var.tags
 }
@@ -91,6 +93,7 @@ module "redis" {
   snapshot_retention_limit = local.redis.snapshot_retention_limit
   snapshot_window          = var.backup_window
   maintenance_window       = var.maintenance_window
+  apply_immediately        = var.apply_immediately
 
   vpc_id                     = var.vpc_id
   subnet_ids                 = var.subnet_ids
@@ -109,6 +112,7 @@ module "memcached" {
   node = local.memcached.node
 
   maintenance_window = var.maintenance_window
+  apply_immediately  = var.apply_immediately
 
   vpc_id                     = var.vpc_id
   subnet_ids                 = var.subnet_ids

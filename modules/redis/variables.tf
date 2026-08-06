@@ -119,6 +119,24 @@ variable "maintenance_window" {
   }
 }
 
+# Immediate by default, because that is what makes an addon predictable: a
+# change to the configuration lands on the next apply, and the plan is the whole
+# story.
+#
+# The exception is a production cache, where a handful of modifications — node
+# type, engine version, replica count — restart or replace nodes and cost a
+# failover. Set this to false and ElastiCache defers those to
+# maintenance_window instead. Two things follow: non-disruptive changes still
+# apply right away, and a deferred one stays pending on the AWS side until the
+# window opens, so a later plan can look clean while the change has not landed
+# yet.
+variable "apply_immediately" {
+  description = "Apply replication group modifications right away instead of deferring the disruptive ones to `maintenance_window`. Turn off on production caches where a failover should wait for the window."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "multi_az_enabled" {
   description = "Spread primary and replicas across AZs with Multi-AZ failover. Requires replicas >= 1."
   type        = bool

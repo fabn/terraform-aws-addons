@@ -35,6 +35,7 @@ output "mysql" {
 
     preferred_maintenance_window = module.mysql[0].preferred_maintenance_window
     preferred_backup_window      = module.mysql[0].preferred_backup_window
+    apply_immediately            = module.mysql[0].apply_immediately
   }
 }
 
@@ -51,6 +52,7 @@ output "postgres" {
 
     preferred_maintenance_window = module.postgres[0].preferred_maintenance_window
     preferred_backup_window      = module.postgres[0].preferred_backup_window
+    apply_immediately            = module.postgres[0].apply_immediately
   }
 }
 
@@ -66,6 +68,7 @@ output "redis" {
 
     maintenance_window = module.redis[0].maintenance_window
     snapshot_window    = module.redis[0].snapshot_window
+    apply_immediately  = module.redis[0].apply_immediately
   }
 }
 
@@ -77,5 +80,6 @@ output "memcached" {
     node              = module.memcached[0].node
 
     maintenance_window = module.memcached[0].maintenance_window
+    apply_immediately  = module.memcached[0].apply_immediately
   }
 }

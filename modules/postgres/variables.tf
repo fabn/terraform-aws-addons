@@ -110,6 +110,24 @@ variable "preferred_backup_window" {
   }
 }
 
+# Immediate by default, because that is what makes an addon predictable: a
+# change to the configuration lands on the next apply, and the plan is the whole
+# story.
+#
+# The exception is a production cluster, where a handful of modifications —
+# instance class, engine version, a static parameter needing a reboot — cost a
+# brief interruption. Set this to false and RDS defers those to
+# preferred_maintenance_window instead. Two things follow: non-disruptive
+# changes still apply right away, and a deferred one stays pending on the AWS
+# side until the window opens, so a later plan can look clean while the change
+# has not landed yet.
+variable "apply_immediately" {
+  description = "Apply cluster modifications right away instead of deferring the disruptive ones to `preferred_maintenance_window`. Turn off on production clusters where a brief interruption should wait for the window."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "replicas" {
   description = "Number of reader instances alongside the writer. Serverless v2 readers share the cluster's ACU range (size/scaling) but each instance scales independently within it; readers also serve as failover targets."
   type        = number

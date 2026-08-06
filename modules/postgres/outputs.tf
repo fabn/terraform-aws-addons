@@ -67,3 +67,8 @@ output "preferred_backup_window" {
   description = "Daily UTC automated-backup window (null when AWS picks a random one)."
   value       = var.preferred_backup_window
 }
+
+output "apply_immediately" {
+  description = "Whether modifications are applied right away or deferred to the maintenance window."
+  value       = var.apply_immediately
+}
