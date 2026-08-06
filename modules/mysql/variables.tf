@@ -196,32 +196,26 @@ variable "allowed_security_group_ids" {
   default     = []
 }
 
-# Two features behind one name, and they do not have the same prerequisites —
-# which is why they are now two variables. Enhanced monitoring collects
-# OS-level metrics through an agent and needs an IAM role the module creates;
-# Performance Insights is turned on at the instance and needs no role at all.
+# Two features, two variables, because they do not share prerequisites. Enhanced
+# monitoring collects OS-level metrics through an agent and creates an IAM role;
+# Performance Insights is enabled on the instance and needs no role at all.
 #
-# Coupling them meant a caller whose principal cannot create IAM roles — a
+# One flag for both meant a caller whose principal cannot create IAM roles — a
 # routine restriction for a role granted across accounts — had to give up query
-# visibility to avoid a permission only the OS metrics ever needed. Worse, the
-# plan says nothing: it applies cleanly until it reaches the role.
-variable "monitoring_enabled" {
-  description = "Deprecated: sets the default for enhanced_monitoring and performance_insights. Prefer setting those directly."
+# visibility for a permission only the OS metrics ever needed. Worse, the plan
+# says nothing: it applies cleanly until it reaches the role.
+variable "enhanced_monitoring" {
+  description = "OS-level metrics through the RDS monitoring agent. Creates an IAM role, so the caller must be allowed to create one."
   type        = bool
   default     = true
   nullable    = false
 }
 
-variable "enhanced_monitoring" {
-  description = "OS-level metrics through the RDS monitoring agent. Creates an IAM role, so it needs a principal allowed to create one. Defaults to monitoring_enabled."
-  type        = bool
-  default     = null
-}
-
 variable "performance_insights" {
-  description = "Query-level load analysis and database insights. Enabled on the instance and needs no IAM role. Defaults to monitoring_enabled."
+  description = "Query-level load analysis and database insights. Enabled on the instance, needs no IAM role."
   type        = bool
-  default     = null
+  default     = true
+  nullable    = false
 }
 
 variable "deletion_protection" {

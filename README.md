@@ -222,13 +222,12 @@ published instead. Right when the master user administers the database rather
 than being the account the application connects as; wrong for an app stack,
 which is why it is off by default.
 
-**Monitoring, split in two.** `enhanced_monitoring` collects OS-level metrics
+**Monitoring, two flags.** `enhanced_monitoring` collects OS-level metrics
 through an agent and creates an IAM role; `performance_insights` is enabled on
-the instance and needs no role at all. They used to share `monitoring_enabled`,
-which forced a caller whose principal cannot create IAM roles — routine for a
-role granted across accounts — to give up query visibility for a permission only
-the OS metrics ever needed. Both default to `monitoring_enabled`, so nothing
-changes for callers that never set them.
+the instance and needs no role at all. Both default to `true`. Set only the
+first to `false` when the Terraform principal is not allowed to create IAM
+roles — a routine restriction for a role granted across accounts — and keep
+query visibility that a single flag would have taken with it.
 
 **The Data API.** `enable_http_endpoint = true` allows SQL over HTTPS with no
 route into the VPC, and backs the console's query editor. Availability varies

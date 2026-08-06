@@ -87,7 +87,7 @@ output "cluster_parameters" {
 output "monitoring" {
   description = "Resolved monitoring flags — enhanced monitoring needs an IAM role, Performance Insights does not."
   value = {
-    enhanced_monitoring  = local.enhanced_monitoring
-    performance_insights = local.performance_insights
+    enhanced_monitoring  = var.enhanced_monitoring
+    performance_insights = var.performance_insights
   }
 }

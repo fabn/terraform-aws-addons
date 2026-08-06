@@ -35,9 +35,10 @@ module "mysql" {
   allowed_cidr_blocks        = var.allowed_cidr_blocks
   allowed_security_group_ids = var.allowed_security_group_ids
 
-  monitoring_enabled  = var.production_grade
-  deletion_protection = var.production_grade
-  skip_final_snapshot = !var.production_grade
+  enhanced_monitoring  = var.production_grade
+  performance_insights = var.production_grade
+  deletion_protection  = var.production_grade
+  skip_final_snapshot  = !var.production_grade
 
   preferred_maintenance_window = var.maintenance_window
   preferred_backup_window      = var.backup_window

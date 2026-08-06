@@ -415,28 +415,3 @@ run "performance_insights_survives_without_the_monitoring_role" {
     error_message = "Performance Insights should survive enhanced monitoring being off"
   }
 }
-
-run "the_old_flag_still_drives_both" {
-  command = apply
-
-  module {
-    source = "./modules/mysql"
-  }
-
-  variables {
-    name               = "myapp-mysql"
-    vpc_id             = "vpc-12345"
-    subnet_ids         = ["subnet-1", "subnet-2"]
-    monitoring_enabled = false
-  }
-
-  assert {
-    condition     = !output.monitoring.enhanced_monitoring
-    error_message = "the old flag should still turn the monitoring role off"
-  }
-
-  assert {
-    condition     = !output.monitoring.performance_insights
-    error_message = "the old flag should still turn Performance Insights off"
-  }
-}
