@@ -16,10 +16,11 @@ output "env" {
 # rather than a degraded one. Two ways to get there: RDS manages the credential,
 # so Terraform never learns the value and a caller reads `master_user_secret_arn`
 # to resolve it — which is the reason to ask for that mode in the first place.
-# Or the cluster was restored and the caller did not pass `master_password`, in
+# Or the cluster was restored and the caller did not pass
+# `source_master_password`, in
 # which case the credential is the source's and the addon was never told it.
 output "sensitive_env" {
-  description = "Credential vars (DATABASE_URL uses the mysql2 scheme expected by the Rails mysql2 adapter). Empty when manage_master_user_password is set, or when a restored cluster was given no master_password."
+  description = "Credential vars (DATABASE_URL uses the mysql2 scheme expected by the Rails mysql2 adapter). Empty when manage_master_user_password is set, or when a restored cluster was given no source_master_password."
   sensitive   = true
   # tomap on both branches so the output keeps one type. A bare `{}` against a
   # populated object leaves Terraform unifying two different object types, which

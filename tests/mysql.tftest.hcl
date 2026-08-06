@@ -559,13 +559,13 @@ run "clone_with_the_source_password_completes_the_contract" {
   }
 
   variables {
-    name            = "myapp-mysql"
-    database        = "prod_app"
-    username        = "source_admin"
-    master_password = "sourcepassword"
-    clone_from      = { source_cluster_identifier = "prod-mysql" }
-    vpc_id          = "vpc-12345"
-    subnet_ids      = ["subnet-1", "subnet-2"]
+    name                   = "myapp-mysql"
+    database               = "prod_app"
+    username               = "source_admin"
+    source_master_password = "sourcepassword"
+    clone_from             = { source_cluster_identifier = "prod-mysql" }
+    vpc_id                 = "vpc-12345"
+    subnet_ids             = ["subnet-1", "subnet-2"]
   }
 
   assert {
@@ -781,13 +781,13 @@ run "rejects_a_source_password_on_an_empty_cluster" {
   }
 
   variables {
-    name            = "myapp-mysql"
-    master_password = "sourcepassword"
-    vpc_id          = "vpc-12345"
-    subnet_ids      = ["subnet-1", "subnet-2"]
+    name                   = "myapp-mysql"
+    source_master_password = "sourcepassword"
+    vpc_id                 = "vpc-12345"
+    subnet_ids             = ["subnet-1", "subnet-2"]
   }
 
-  expect_failures = [var.master_password]
+  expect_failures = [var.source_master_password]
 }
 
 run "rejects_a_managed_master_password_on_a_clone" {

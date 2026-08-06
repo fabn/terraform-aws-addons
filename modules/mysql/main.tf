@@ -31,7 +31,7 @@ locals {
   # cluster, the source's (as supplied by the caller) for a restored one, and
   # null when nobody here knows it — RDS-managed, or a restore whose caller
   # did not pass one.
-  password = local.restored ? var.master_password : one(random_password.admin[*].result)
+  password = local.restored ? var.source_master_password : one(random_password.admin[*].result)
 
   # use_latest_restorable_time is what makes the clone track the source, so it
   # is the default unless the caller pinned a timestamp — AWS takes one or the
@@ -179,6 +179,16 @@ module "cluster" {
   # CloudWatch (log group created here so retention is managed). The group is
   # shared with whatever the caller passes in var.cluster_parameters, so it also
   # exists when the slow query log is off but extra parameters are not.
+  #
+  # A restored cluster gets this group too, not the source's — deliberately. A
+  # clone copies the source's data, and parameters are configuration rather than
+  # data, so nothing carries them across on its own. Adopting them would be the
+  # wrong default anyway: a clone of a cluster carrying binlog_format or
+  # gtid_mode would come up configured as a replication source it is not, and
+  # the binlog activity alone would keep a scale-to-zero clone from ever
+  # pausing — which is most of the reason a per-PR clone is cheap. A caller who
+  # genuinely wants the source's engine settings restates them in
+  # var.cluster_parameters.
   enabled_cloudwatch_logs_exports = var.slow_query_log ? ["slowquery"] : []
   create_cloudwatch_log_group     = var.slow_query_log
   cluster_parameter_group = length(local.cluster_parameters) == 0 ? null : {

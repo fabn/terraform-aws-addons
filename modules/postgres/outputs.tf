@@ -15,11 +15,11 @@ output "env" {
 }
 
 # Empty when the cluster was restored and the caller did not pass
-# `master_password`: the credential is then the source's, and the addon was
+# `source_master_password`: the credential is then the source's, and the addon was
 # never told it. That is the honest answer rather than a degraded one — a
 # fabricated URL would fail at connect time instead of here.
 output "sensitive_env" {
-  description = "Credential vars (DATABASE_URL uses the postgresql scheme expected by the Rails pg adapter). Empty when a restored cluster was given no master_password."
+  description = "Credential vars (DATABASE_URL uses the postgresql scheme expected by the Rails pg adapter). Empty when a restored cluster was given no source_master_password."
   sensitive   = true
   # tomap on both branches so the output keeps one type. A bare `{}` against a
   # populated object leaves Terraform unifying two different object types, which

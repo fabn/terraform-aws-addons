@@ -30,7 +30,7 @@ locals {
   # The password `sensitive_env` publishes: generated here for an empty
   # cluster, the source's (as supplied by the caller) for a restored one, and
   # null when a restore's caller did not pass one.
-  password = local.restored ? var.master_password : one(random_password.admin[*].result)
+  password = local.restored ? var.source_master_password : one(random_password.admin[*].result)
 
   # use_latest_restorable_time is what makes the clone track the source, so it
   # is the default unless the caller pinned a timestamp — AWS takes one or the
@@ -118,6 +118,14 @@ module "cluster" {
   # threshold is written to the postgresql log and exported to CloudWatch
   # (log group created here so retention is managed). It is a dynamic cluster
   # parameter, so it never keeps a scale-to-0 cluster from pausing.
+  #
+  # A restored cluster gets this group too, not the source's — deliberately. A
+  # clone copies the source's data, and parameters are configuration rather than
+  # data, so nothing carries them across on its own. Adopting them would be the
+  # wrong default anyway: a clone of a cluster set up for logical replication
+  # would come up configured as something it is not, and the resulting activity
+  # would keep a scale-to-zero clone from ever pausing — which is most of the
+  # reason a per-PR clone is cheap.
   enabled_cloudwatch_logs_exports = var.slow_query_log ? ["postgresql"] : []
   create_cloudwatch_log_group     = var.slow_query_log
   cluster_parameter_group = !var.slow_query_log ? null : {

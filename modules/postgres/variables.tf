@@ -147,27 +147,34 @@ variable "snapshot_identifier" {
   }
 }
 
-# A restored cluster's master password is the source's: RDS neither accepts nor
-# generates one at restore time, so the addon has nothing to put in
-# `sensitive_env` unless the caller supplies it. Pass it and the contract is
-# whole — DATABASE_URL composes exactly as it does for an empty cluster. Leave
-# it out and `sensitive_env` is empty, the same honest answer the addon gives
-# when RDS owns the password.
+# Describes a credential, it does not set one — the distinction is the whole
+# point of the name. A restored cluster's master password came off the source's
+# storage volume, and `restore-db-cluster-to-point-in-time` has no master_*
+# parameter at all: there is no API surface through which this module could
+# change it. Anything that tried would have to be an `ALTER USER` against the
+# running cluster, which is a job for whatever seeds the environment, not for
+# Terraform.
+#
+# So this is the caller telling the addon a password it already knows, purely so
+# `sensitive_env` can compose DATABASE_URL as it does for an empty cluster.
+# Leave it out and `sensitive_env` is empty — the same honest answer the addon
+# gives when RDS owns the password. Pass it wrong and nothing fails at apply:
+# the cluster is fine and the published URL simply will not authenticate.
 #
 # The value goes into Terraform state, like every other credential the addon
 # publishes. It must also be URL-safe: it lands in DATABASE_URL verbatim, and
 # nothing here percent-encodes it (the passwords this module generates avoid
 # special characters for the same reason).
-variable "master_password" {
-  description = "Master password of the restored source, used to compose the credentials in `sensitive_env`. Only valid with `clone_from`/`snapshot_identifier`; must be URL-safe. Omit to leave `sensitive_env` empty."
+variable "source_master_password" {
+  description = "Master password the restored source already has, used only to compose `sensitive_env` — it is never applied to the cluster. Only valid with `clone_from`/`snapshot_identifier`; must be URL-safe. Omit to leave `sensitive_env` empty."
   type        = string
   sensitive   = true
   default     = null
   nullable    = true
 
   validation {
-    condition     = var.master_password == null || var.clone_from != null || var.snapshot_identifier != null
-    error_message = "master_password only applies when restoring (clone_from or snapshot_identifier); an empty cluster generates its own."
+    condition     = var.source_master_password == null || var.clone_from != null || var.snapshot_identifier != null
+    error_message = "source_master_password only applies when restoring (clone_from or snapshot_identifier); an empty cluster generates its own password."
   }
 }
 
