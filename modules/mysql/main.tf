@@ -36,9 +36,29 @@ locals {
     }],
   )
 
+  # The ports are -1 rather than omitted, and that is load-bearing. The upstream
+  # module resolves them with coalesce(from_port, to_port, local.port), so an
+  # egress rule that leaves them out gets the *database port* — and AWS rejects
+  # ports on an all-protocols rule outright: "You may not specify all protocols
+  # and specific ports."
+  #
+  # Omitting them does not help either, because coalesce skips nulls and lands on
+  # the same fallback. -1 is what AWS itself stores for an all-protocols rule, so
+  # passing it explicitly both avoids the fallback and matches what a describe
+  # returns, leaving no permanent diff.
+  #
+  # This fails at apply, not at plan: creating the rule works, and it is the
+  # first *modify* — a description edit, a tag added anywhere on the cluster —
+  # that sends the ports and gets the 400.
   security_group_egress_rules = {
     for i, cidr in var.egress_cidr_blocks :
-    "cidr_${i}" => { description = "Outbound to ${cidr}", cidr_ipv4 = cidr, ip_protocol = "-1" }
+    "cidr_${i}" => {
+      description = "Outbound to ${cidr}"
+      cidr_ipv4   = cidr
+      ip_protocol = "-1"
+      from_port   = -1
+      to_port     = -1
+    }
   }
 
   security_group_ingress_rules = merge(
