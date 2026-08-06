@@ -202,6 +202,23 @@ variable "subnet_ids" {
   type        = list(string)
 }
 
+# Outbound, which a database usually needs none of — and which the module
+# therefore leaves closed rather than opening by default. Terraform creates a
+# security group with no egress at all, so nothing here reaches the internet
+# unless it is asked for.
+#
+# It has to be asked for when the cluster replicates from a source outside the
+# VPC: replication is *outbound*, the writer dials the source, and with no egress
+# rule the connection simply never establishes. The failure gives nothing away —
+# ingress is present, the plan is clean, and SHOW REPLICA STATUS reports
+# "Can't connect to MySQL server" as if the source were down.
+variable "egress_cidr_blocks" {
+  description = "CIDR blocks the cluster may open connections to. Empty means no egress, which is right unless the cluster replicates from outside the VPC."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
 variable "allowed_cidr_blocks" {
   description = "CIDR blocks allowed to reach the cluster."
   type        = list(string)

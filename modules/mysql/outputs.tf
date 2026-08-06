@@ -96,3 +96,8 @@ output "monitoring" {
     performance_insights = var.performance_insights
   }
 }
+
+output "egress_rules" {
+  description = "Resolved outbound rules — empty unless egress_cidr_blocks was set."
+  value       = local.security_group_egress_rules
+}
