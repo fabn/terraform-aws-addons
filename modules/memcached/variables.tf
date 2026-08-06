@@ -49,6 +49,25 @@ variable "maintenance_window" {
   }
 }
 
+# Immediate by default, because that is what makes an addon predictable: a
+# change to the configuration lands on the next apply, and the plan is the whole
+# story.
+#
+# The exception is a production cache, where a handful of modifications — node
+# type, node count, engine version — replace nodes, and the replacements come up
+# empty. This addon is ephemeral by design (a cold node is a miss the app
+# absorbs), so the cost is a burst of misses rather than lost data; where that
+# burst still needs to land off-peak, set this to false and ElastiCache defers
+# those modifications to maintenance_window instead. A deferred change stays
+# pending on the AWS side until the window opens, so a later plan can look clean
+# while the change has not landed yet.
+variable "apply_immediately" {
+  description = "Apply cluster modifications right away instead of deferring the disruptive ones to `maintenance_window`. Turn off where the cold cache that follows a node replacement should wait for the window."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "vpc_id" {
   description = "VPC where the cluster is created."
   type        = string

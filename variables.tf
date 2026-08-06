@@ -136,6 +136,18 @@ variable "backup_window" {
   }
 }
 
+# Kept separate from production_grade even though both describe how careful the
+# stack wants to be: production_grade is about what survives a destroy, this is
+# about when a change lands. A production stack that deploys often may well want
+# both true — modifications applied on the spot, because waiting for Monday
+# night to see the change is worse than the interruption itself.
+variable "apply_immediately" {
+  description = "Apply addon modifications right away instead of deferring the disruptive ones (instance/node type, engine version) to `maintenance_window`. Applies to every addon; turn off where a brief interruption should wait for the window."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "tags" {
   description = "Additional tags applied to all resources."
   type        = map(string)

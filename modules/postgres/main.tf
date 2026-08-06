@@ -92,7 +92,7 @@ module "cluster" {
   }
 
   # Explicit params
-  apply_immediately       = true
+  apply_immediately       = var.apply_immediately
   storage_encrypted       = true
   copy_tags_to_snapshot   = true
   backup_retention_period = var.backup_retention_period

@@ -58,3 +58,8 @@ output "snapshot_window" {
   description = "Daily UTC snapshot window (null when persistence is off or AWS picks a random one)."
   value       = local.snapshot_window
 }
+
+output "apply_immediately" {
+  description = "Whether modifications are applied right away or deferred to the maintenance window."
+  value       = var.apply_immediately
+}

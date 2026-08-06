@@ -191,6 +191,41 @@ use the submodules directly — mysql/postgres take
 `maintenance_window` + `snapshot_window`, memcached takes
 `maintenance_window`.
 
+#### When changes land
+
+Addons apply their changes immediately: a modified configuration takes effect
+on the next `terraform apply`, and the plan is the whole story. That is the
+right default for an addon, and most modifications are non-disruptive anyway.
+
+A few are not. Changing an instance class, a node type, an engine version, or
+a static parameter needing a reboot costs a brief interruption — a failover on
+the Aurora clusters, restarted (and cold) nodes on the ElastiCache ones. On a
+production stack that interruption is better spent inside the maintenance
+window than in the middle of a deploy:
+
+```hcl
+module "addons" {
+  source = "fabn/addons/aws"
+  # ...
+  apply_immediately  = false                  # disruptive changes wait...
+  maintenance_window = "sun:04:00-sun:05:00"  # ...for this window
+}
+```
+
+`apply_immediately` (root, applied to **every** addon; also available on each
+submodule) defaults to `true`. Two consequences of turning it off are worth
+knowing before you do:
+
+- **Deferred is not applied.** The change is accepted by AWS and stays pending
+  until the window opens, so Terraform reports success and a later plan can
+  look clean while the cluster is still running the old configuration.
+- **It is only as predictable as the window.** With `maintenance_window = null`
+  AWS picks a random window per addon, and a deferred change lands whenever
+  that happens to be — which is why the two settings belong together.
+
+Deploying often is itself an argument for leaving this `true`: waiting until
+Monday night to see a change is usually worse than the interruption it avoids.
+
 ### Beyond an app-stack addon (mysql)
 
 Three options the root wrapper does not expose, for callers using

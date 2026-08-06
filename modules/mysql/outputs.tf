@@ -79,6 +79,11 @@ output "preferred_backup_window" {
   value       = var.preferred_backup_window
 }
 
+output "apply_immediately" {
+  description = "Whether modifications are applied right away or deferred to the maintenance window."
+  value       = var.apply_immediately
+}
+
 output "cluster_parameters" {
   description = "Resolved DB cluster parameters — the addon's own plus anything passed in `cluster_parameters`."
   value       = local.cluster_parameters

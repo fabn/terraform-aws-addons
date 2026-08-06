@@ -339,3 +339,70 @@ run "rejects_malformed_shared_maintenance_window" {
 
   expect_failures = [var.maintenance_window]
 }
+
+run "modifications_are_immediate_by_default_on_every_addon" {
+  command = apply
+
+  variables {
+    name             = "myapp"
+    production_grade = false
+    vpc_id           = "vpc-12345"
+    subnet_ids       = ["subnet-1", "subnet-2"]
+    addons = {
+      mysql     = { size = "mini" }
+      postgres  = { size = "mini" }
+      redis     = { size = "mini" }
+      memcached = { size = "mini" }
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      output.mysql.apply_immediately,
+      output.postgres.apply_immediately,
+      output.redis.apply_immediately,
+      output.memcached.apply_immediately,
+    ])
+    error_message = "every addon should apply changes on the next apply unless told otherwise"
+  }
+}
+
+run "modifications_can_be_deferred_across_every_addon" {
+  command = apply
+
+  variables {
+    name              = "myapp"
+    production_grade  = false
+    apply_immediately = false
+    vpc_id            = "vpc-12345"
+    subnet_ids        = ["subnet-1", "subnet-2"]
+    addons = {
+      mysql     = { size = "mini" }
+      postgres  = { size = "mini" }
+      redis     = { size = "mini" }
+      memcached = { size = "mini" }
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      !output.mysql.apply_immediately,
+      !output.postgres.apply_immediately,
+      !output.redis.apply_immediately,
+      !output.memcached.apply_immediately,
+    ])
+    error_message = "the shared apply_immediately setting should reach every addon"
+  }
+
+  # The pairing that makes deferring worth anything: the same wrapper that
+  # postpones the change also decides when the window that runs it opens.
+  assert {
+    condition = alltrue([
+      output.mysql.preferred_maintenance_window == "mon:03:00-mon:04:00",
+      output.postgres.preferred_maintenance_window == "mon:03:00-mon:04:00",
+      output.redis.maintenance_window == "mon:03:00-mon:04:00",
+      output.memcached.maintenance_window == "mon:03:00-mon:04:00",
+    ])
+    error_message = "deferred changes should land in the shared off-peak maintenance window"
+  }
+}
