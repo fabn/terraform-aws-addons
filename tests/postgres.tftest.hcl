@@ -656,3 +656,158 @@ run "postgres_publishes_the_cluster_arn" {
     error_message = "the cluster ARN should be published rather than left to be rebuilt"
   }
 }
+
+run "provisioned_class_replaces_the_acu_range" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name           = "myapp-postgres"
+    size           = null
+    instance_class = "db.r7g.large"
+    vpc_id         = "vpc-12345"
+    subnet_ids     = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.instance_class == "db.r7g.large"
+    error_message = "a named class should reach the writer instead of db.serverless"
+  }
+
+  # A provisioned cluster has no ACU range at all — passing one alongside a
+  # fixed class is what AWS rejects.
+  assert {
+    condition     = output.scaling == null
+    error_message = "a provisioned cluster should carry no serverless scaling configuration"
+  }
+}
+
+run "serverless_stays_the_default" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name       = "myapp-postgres"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.instance_class == "db.serverless"
+    error_message = "nothing should change for a caller who never mentions instance_class"
+  }
+
+  assert {
+    condition     = output.scaling.min_capacity == 0 && output.scaling.max_capacity == 1
+    error_message = "the mini preset should still resolve to its ACU range"
+  }
+}
+
+run "provisioned_class_applies_to_readers_too" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name           = "myapp-postgres"
+    size           = null
+    instance_class = "db.r7g.xlarge"
+    replicas       = 2
+    vpc_id         = "vpc-12345"
+    subnet_ids     = ["subnet-1", "subnet-2"]
+  }
+
+  # Readers inherit the writer's class: the instances map is built from one
+  # definition, so a mixed-class cluster is not something this addon expresses.
+  assert {
+    condition     = output.instance_class == "db.r7g.xlarge"
+    error_message = "every instance should share the class, readers included"
+  }
+}
+
+run "rejects_a_preset_alongside_a_provisioned_class" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name           = "myapp-postgres"
+    size           = "medium"
+    instance_class = "db.r7g.large"
+    vpc_id         = "vpc-12345"
+    subnet_ids     = ["subnet-1", "subnet-2"]
+  }
+
+  # Silently ignoring the preset would be the worst of the three outcomes.
+  expect_failures = [var.size]
+}
+
+run "rejects_an_acu_range_alongside_a_provisioned_class" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name = "myapp-postgres"
+    size = null
+    scaling = {
+      min_capacity = 0
+      max_capacity = 4
+    }
+    instance_class = "db.r7g.large"
+    vpc_id         = "vpc-12345"
+    subnet_ids     = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.size]
+}
+
+run "rejects_naming_the_serverless_class_directly" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name           = "myapp-postgres"
+    size           = null
+    instance_class = "db.serverless"
+    vpc_id         = "vpc-12345"
+    subnet_ids     = ["subnet-1", "subnet-2"]
+  }
+
+  # It would build a serverless cluster with no capacity range: accepted here,
+  # rejected by AWS.
+  expect_failures = [var.instance_class]
+}
+
+run "rejects_a_class_that_is_not_one" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name           = "myapp-postgres"
+    size           = null
+    instance_class = "r7g.large"
+    vpc_id         = "vpc-12345"
+    subnet_ids     = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.instance_class]
+}

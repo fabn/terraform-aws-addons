@@ -406,3 +406,77 @@ run "modifications_can_be_deferred_across_every_addon" {
     error_message = "deferred changes should land in the shared off-peak maintenance window"
   }
 }
+
+run "sql_addon_accepts_a_provisioned_class" {
+  command = apply
+
+  variables {
+    name             = "myapp"
+    production_grade = false
+    vpc_id           = "vpc-12345"
+    subnet_ids       = ["subnet-1", "subnet-2"]
+    addons = {
+      mysql    = { instance_class = "db.r7g.large" }
+      postgres = { size = "mini" }
+    }
+  }
+
+  assert {
+    condition     = output.mysql.instance_class == "db.r7g.large" && output.mysql.scaling == null
+    error_message = "a provisioned class in the addons map should replace the serverless default"
+  }
+
+  # The preset default must not leak in and collide with the class.
+  assert {
+    condition     = output.postgres.instance_class == "db.serverless"
+    error_message = "an addon that named no class should stay on Serverless v2"
+  }
+}
+
+run "rejects_size_and_instance_class_on_the_same_addon" {
+  command = plan
+
+  variables {
+    name       = "myapp"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    addons = {
+      mysql = { size = "medium", instance_class = "db.r7g.large" }
+    }
+  }
+
+  expect_failures = [var.addons]
+}
+
+run "rejects_scaling_and_instance_class_on_the_same_addon" {
+  command = plan
+
+  variables {
+    name       = "myapp"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    addons = {
+      mysql = {
+        scaling        = { min_capacity = 0, max_capacity = 4 }
+        instance_class = "db.r7g.large"
+      }
+    }
+  }
+
+  expect_failures = [var.addons]
+}
+
+run "rejects_instance_class_on_a_cache_addon" {
+  command = plan
+
+  variables {
+    name       = "myapp"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    addons = {
+      redis = { instance_class = "db.r7g.large" }
+    }
+  }
+
+  expect_failures = [var.addons]
+}

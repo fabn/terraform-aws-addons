@@ -21,8 +21,9 @@ module "mysql" {
   name = "${var.name}-mysql"
   # Custom resources win over the preset; entries with neither get the
   # smallest plan, Heroku-style.
-  size    = local.mysql.scaling != null ? null : coalesce(local.mysql.size, "mini")
-  scaling = local.mysql.scaling
+  size           = local.mysql.scaling != null || local.mysql.instance_class != null ? null : coalesce(local.mysql.size, "mini")
+  scaling        = local.mysql.scaling
+  instance_class = local.mysql.instance_class
 
   # The default database is named after the stack, not the addon instance.
   database       = coalesce(local.mysql.database, replace(var.name, "-", "_"))
@@ -54,8 +55,9 @@ module "postgres" {
   name = "${var.name}-postgres"
   # Custom resources win over the preset; entries with neither get the
   # smallest plan, Heroku-style.
-  size    = local.postgres.scaling != null ? null : coalesce(local.postgres.size, "mini")
-  scaling = local.postgres.scaling
+  size           = local.postgres.scaling != null || local.postgres.instance_class != null ? null : coalesce(local.postgres.size, "mini")
+  scaling        = local.postgres.scaling
+  instance_class = local.postgres.instance_class
 
   # The default database is named after the stack, not the addon instance.
   database       = coalesce(local.postgres.database, replace(var.name, "-", "_"))

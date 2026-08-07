@@ -77,14 +77,14 @@ module "mysql" {
 
 Each addon accepts a Heroku-style `size` preset. The variable is nullable:
 set `size = null` and pass the addon-specific resources variable instead
-(`scaling` for mysql/postgres, `node` for redis/memcached) when the presets
-don't fit.
+(`scaling` or `instance_class` for mysql/postgres, `node` for
+redis/memcached) when the presets don't fit.
 
 #### mysql / postgres — Aurora Serverless v2 (ACU ranges, 1 ACU = 2 GiB RAM)
 
-Both SQL addons share the same presets, the same `scaling` escape hatch and
-the same contract — a stack picks either database interchangeably (they both
-expose `DATABASE_URL`).
+Both SQL addons share the same presets, the same `scaling` / `instance_class`
+escape hatches and the same contract — a stack picks either database
+interchangeably (they both expose `DATABASE_URL`).
 
 | Size | Min ACU | Max ACU | Scales to zero |
 |--------|---------|---------|------------------|
@@ -106,6 +106,47 @@ Slow queries are logged by default (`long_query_time = 2`s) and exported
 to CloudWatch Logs; opt out with `slow_query_log = false`. mysql uses the
 slow query log, postgres the equivalent `log_min_duration_statement`.
 Automated backups are kept for 7 days (`backup_retention_period`).
+
+##### Leaving Serverless v2 for a provisioned class
+
+Serverless v2 is the default and stays the right one for most stacks: it
+bills a floor continuously and pays off when load varies or disappears. A
+database with a steady working set and no idle periods gets more memory per
+euro from a fixed instance class, plus a buffer pool that does not resize
+underneath the workload. That is a post-launch decision — a database starts
+serverless, and the question arises once there is data to answer it.
+
+```hcl
+mysql = {
+  size           = null            # the preset is an ACU range, so drop it
+  instance_class = "db.r7g.large"  # ...and name the class instead
+}
+```
+
+Three ways to size a SQL addon, and they are **alternatives rather than
+layers** — exactly one must be set:
+
+| | Sizing | Scales to zero |
+|---|---|---|
+| `size` | preset ACU range | mini/small only |
+| `scaling` | custom ACU range | with `min_capacity = 0` |
+| `instance_class` | fixed instance | no |
+
+Setting more than one fails at plan rather than silently ignoring the preset.
+`instance_class` also rejects `db.serverless` itself: that is what `size` and
+`scaling` already mean, and naming it directly would build a serverless
+cluster with no capacity range — accepted by Terraform, rejected by AWS.
+
+Two deliberate omissions:
+
+- **No provisioned presets.** `instance_class` is the escape hatch where the
+  caller names the class, the way `scaling` already is for capacity. The
+  reason to leave Serverless v2 is a sizing review that concluded which class
+  wins; a `medium` that silently meant `db.r7g.large` would hide the decision
+  the caller came here to make.
+- **Readers inherit the writer's class.** `replicas` builds every instance
+  from one definition. A reader sized differently from its writer is a tuning
+  problem rather than an addon-shaped one.
 
 #### redis / memcached — ElastiCache node types
 

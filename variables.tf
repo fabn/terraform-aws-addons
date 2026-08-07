@@ -17,9 +17,10 @@ variable "name" {
 #
 # `size` picks a preset plan (mini, small, medium, large — mini being the
 # default); custom computational resources go in the addon-specific
-# attribute instead (`scaling` for mysql/postgres ACU ranges, `node` for
-# redis/memcached node type/count). Per-addon knobs beyond sizing live on
-# the submodules, meant to be used directly for those cases.
+# attribute instead (`scaling` for mysql/postgres ACU ranges,
+# `instance_class` to leave Serverless v2 for provisioned instances, `node`
+# for redis/memcached node type/count). Per-addon knobs beyond sizing live
+# on the submodules, meant to be used directly for those cases.
 variable "addons" {
   description = "Map of addon name => addon spec. Supported addons: mysql, postgres, redis, memcached."
   type = map(object({
@@ -32,6 +33,8 @@ variable "addons" {
       max_capacity             = number
       seconds_until_auto_pause = optional(number)
     }))
+    # mysql/postgres only: provisioned instance class instead of Serverless v2.
+    instance_class = optional(string)
     # redis/memcached only: custom node type (+ node count on memcached).
     node = optional(object({
       node_type = string
@@ -54,13 +57,20 @@ variable "addons" {
   }
 
   validation {
-    condition     = alltrue([for k, spec in var.addons : spec.size == null || (spec.scaling == null && spec.node == null)])
-    error_message = "Each addon may set either size or custom resources (scaling/node), not both."
+    condition     = alltrue([for k, spec in var.addons : spec.size == null || (spec.scaling == null && spec.node == null && spec.instance_class == null)])
+    error_message = "Each addon may set either size or custom resources (scaling/instance_class/node), not both."
+  }
+
+  # Two ways to size a SQL addon beyond the presets, and they are alternatives:
+  # an ACU range keeps Serverless v2, a class leaves it.
+  validation {
+    condition     = alltrue([for k, spec in var.addons : spec.scaling == null || spec.instance_class == null])
+    error_message = "scaling and instance_class are alternatives: an ACU range keeps Serverless v2, a provisioned class replaces it."
   }
 
   validation {
-    condition     = alltrue([for k, spec in var.addons : (spec.scaling == null && spec.database == null && spec.username == null && spec.slow_query_log == null) || contains(["mysql", "postgres"], k)])
-    error_message = "scaling, database, username and slow_query_log only apply to the mysql and postgres addons."
+    condition     = alltrue([for k, spec in var.addons : (spec.scaling == null && spec.instance_class == null && spec.database == null && spec.username == null && spec.slow_query_log == null) || contains(["mysql", "postgres"], k)])
+    error_message = "scaling, instance_class, database, username and slow_query_log only apply to the mysql and postgres addons."
   }
 
   validation {
