@@ -71,6 +71,11 @@ output "cluster_arn" {
   value       = module.cluster.cluster_arn
 }
 
+output "engine_version" {
+  description = "Engine version the cluster is actually running. Not an echo of var.engine_version: that is null when the caller lets AWS choose, and on a restored cluster the version comes from the source rather than from configuration. Exists so a clone can be pinned to its source's version — a clone cannot change engine version at creation, so the two must agree, and deriving it beats keeping two literals in step by hand."
+  value       = module.cluster.cluster_engine_version_actual
+}
+
 output "security_group_id" {
   description = "ID of the security group protecting the cluster."
   value       = module.cluster.security_group_id
