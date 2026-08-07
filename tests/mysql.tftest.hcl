@@ -809,3 +809,24 @@ run "rejects_a_managed_master_password_on_a_clone" {
   # credential, so the secret RDS was asked to mint never gets created.
   expect_failures = [var.manage_master_user_password]
 }
+
+run "mysql_publishes_the_cluster_arn" {
+  command = apply
+
+  module {
+    source = "./modules/mysql"
+  }
+
+  variables {
+    name       = "myapp-mysql"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  # The Data API and IAM policies want the ARN, and reassembling it from
+  # identifier + region + account is the caller's problem this output removes.
+  assert {
+    condition     = output.cluster_arn != null
+    error_message = "the cluster ARN should be published rather than left to be rebuilt"
+  }
+}

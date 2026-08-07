@@ -279,9 +279,15 @@ by region and engine version, so an apply is the only reliable check.
 
 Both SQL submodules can create the cluster as a copy of an existing one instead
 of an empty database. An Aurora clone is copy-on-write against the source's
-storage layer: it is ready in minutes largely regardless of database size, and
-billed only for the pages it changes — which is what makes a per-PR or
-per-environment database seeded from production-like data practical at all.
+storage layer: the data is there in about two minutes largely regardless of
+database size, and billed only for the pages it changes — which is what makes a
+per-PR or per-environment database seeded from production-like data practical
+at all.
+
+The storage is the fast part; the compute is not. Measured end to end on a
+throwaway clone: **cluster clone ~2 min, instance provisioning ~9.5 min,
+destroy ~17 min.** So "ready in minutes regardless of size" is a statement
+about the data, not about how soon the environment answers queries.
 
 ```hcl
 module "review_app_db" {
@@ -323,9 +329,12 @@ time. Two consequences:
   when RDS owns the password. Pass it *wrong* and nothing fails at apply — the
   published URL simply will not authenticate.
 
-`manage_master_user_password` is rejected in this mode: RDS cannot mint a new
-master secret for a cluster whose credentials came off the volume, so accepting
-the variable would mean silently ignoring it.
+`manage_master_user_password` is rejected in this mode. Not because handing the
+inherited master to Secrets Manager is impossible, but because it cannot happen
+*at creation*: the restore APIs take no such parameter, so the flag would be
+silently dropped. `modify-db-cluster` does accept it, so rotating a clone's
+master onto a managed secret is a later operation — one this addon does not
+currently perform.
 
 > **Every account on the source exists on the clone, with the source's
 > passwords** — including whatever the application connects as. That is fine
@@ -335,10 +344,47 @@ the variable would mean silently ignoring it.
 > the running clone: a job for whatever seeds the environment, not for
 > Terraform.
 
-**A clone is not a replica.** It has no inbound replication, so nothing keeps
-the writer busy and the scale-to-zero sizes work here exactly as on an empty
-cluster — `size = "mini"` (the default) still auto-pauses. That makes idle
-review-app databases close to free.
+**A clone is not a replica — unless its source was one.** Cloning does not
+create inbound replication, so normally nothing keeps the writer busy and the
+scale-to-zero sizes work exactly as on an empty cluster: `size = "mini"` (the
+default) still auto-pauses, which is what makes idle review-app databases close
+to free.
+
+That holds only when the source was not itself an inbound binlog replica of an
+external MySQL server. Replication *state* is not configuration and does not
+live in the parameter group — it lives in InnoDB tables in the `mysql` schema,
+on the very volume the clone shares. A clone of a replica therefore comes up at
+first boot still pointing at its source's replication source, retrying
+(`Replica_IO_Running: Connecting`) up to 86,400 times at 60-second intervals —
+about sixty days — even when the security group gives it no egress and the
+connection can never succeed.
+
+**That alone prevents auto-pause**, verified by controlled test: with the
+inherited channel the cluster pinned at its ceiling and never paused; after
+resetting it, the same cluster scaled to zero. For a per-PR clone this inverts
+the cost argument — a cluster doing nothing sits at maximum capacity. Clear it
+on the clone with:
+
+```sql
+CALL mysql.rds_stop_replication();
+CALL mysql.rds_reset_external_source();
+```
+
+No downtime, but note the ordering below: those calls need the Data API, which
+on a restored cluster needs a second apply.
+
+**The Data API cannot be enabled while restoring.** `enable_http_endpoint =
+true` is passed through correctly, and AWS discards it: neither
+`restore-db-cluster-to-point-in-time` nor `restore-db-cluster-from-snapshot`
+has that parameter, though `create-db-cluster` and `modify-db-cluster` both do.
+The apply succeeds, AWS reports `HttpEndpointEnabled: False`, and Terraform
+records `false` — so there is no drift to notice, just a second plan proposing
+`false -> true` that takes about 1m45s to apply.
+
+The consequence is an ordering one: **anything a caller wants to do over the
+Data API immediately after creating a clone is gated behind a second apply** —
+including creating the application accounts, which is the first thing a cloned
+environment needs.
 
 **A clone gets the addon's parameter group, not the source's.** Parameters are
 configuration rather than data, so nothing carries them across a clone on its

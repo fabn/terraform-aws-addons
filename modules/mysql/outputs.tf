@@ -72,6 +72,11 @@ output "cluster_identifier" {
   value       = module.cluster.cluster_id
 }
 
+output "cluster_arn" {
+  description = "ARN of the cluster, as the Data API and IAM policies want it — saves callers reassembling it from identifier, region and account."
+  value       = module.cluster.cluster_arn
+}
+
 output "security_group_id" {
   description = "ID of the security group protecting the cluster."
   value       = module.cluster.security_group_id

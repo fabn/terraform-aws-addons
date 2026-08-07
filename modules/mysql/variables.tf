@@ -120,12 +120,15 @@ variable "manage_master_user_password" {
   default     = false
   nullable    = false
 
-  # Nothing to manage on a restore: the cluster comes up with the source's
-  # master credential, and asking RDS to mint one here would describe a secret
-  # that never gets created.
+  # Not at creation, which is a narrower claim than impossible: the restore APIs
+  # take no such parameter, so RDS would drop the flag and mint nothing. A later
+  # modify-db-cluster does accept it, so rotating an inherited master onto a
+  # managed secret is a real operation — just not one this addon performs, and
+  # accepting the variable here would promise it at a point where it cannot
+  # happen.
   validation {
     condition     = !var.manage_master_user_password || (var.clone_from == null && var.snapshot_identifier == null)
-    error_message = "manage_master_user_password does not apply when restoring: a clone or snapshot keeps the source's master password (pass it as master_password instead)."
+    error_message = "manage_master_user_password cannot be set while restoring: the restore APIs drop it, so the clone would keep the source's master password regardless (pass it as source_master_password to publish the credentials)."
   }
 }
 
@@ -144,6 +147,16 @@ variable "manage_master_user_password" {
 # A clone is not a replica: no inbound replication means nothing keeps the
 # writer busy, so the scale-to-zero sizes (the mini/small default) work here
 # exactly as they do on an empty cluster.
+#
+# With one exception, and it is expensive. Replication *state* is not
+# configuration — it lives in InnoDB tables in the `mysql` schema, on the volume
+# the clone shares — so the parameter group carrying no gtid_mode does not save
+# a clone whose source was itself an inbound binlog replica. That clone boots
+# still pointing at its source's replication source and retries for roughly
+# sixty days, which is enough to keep it pinned at its ceiling and stop it
+# pausing entirely. mysql.rds_stop_replication() and
+# mysql.rds_reset_external_source() clear it, over the Data API — which on a
+# restored cluster is itself a second apply away.
 variable "clone_from" {
   description = "Create the cluster as a clone of an existing one instead of empty. Defaults to a copy-on-write clone of the source's latest restorable time; a clone inherits the source's users, schemas and master password."
   type = object({
@@ -231,6 +244,13 @@ variable "source_master_password" {
 # The Data API: an HTTPS endpoint for running SQL without a route into the VPC,
 # and what the console's query editor is built on. Availability varies by region
 # and engine version, so an apply is the only reliable check.
+#
+# It cannot be turned on while restoring. Neither restore API carries the
+# parameter (create-db-cluster and modify-db-cluster both do), so AWS drops it,
+# reports HttpEndpointEnabled: False, and Terraform records false — no drift,
+# just a second plan proposing false -> true. Anything a caller wants to do over
+# the Data API right after cloning — creating the application accounts, say — is
+# therefore gated behind that second apply.
 variable "enable_http_endpoint" {
   description = "Enable the RDS Data API on the cluster, allowing SQL over HTTPS from outside the VPC."
   type        = bool
