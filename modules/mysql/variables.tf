@@ -4,7 +4,7 @@ variable "name" {
 }
 
 variable "size" {
-  description = "Heroku-style preset size (mini, small, medium, large) mapped to Serverless v2 ACU ranges; mini/small scale to zero. Set to null and pass `scaling` for custom capacity."
+  description = "Heroku-style preset size (mini, small, medium, large) mapped to Serverless v2 ACU ranges; mini/small scale to zero. Set to null and pass `scaling` for a custom ACU range, or `instance_class` for provisioned instances."
   type        = string
   default     = "mini"
   nullable    = true
@@ -14,9 +14,43 @@ variable "size" {
     error_message = "size must be one of: mini, small, medium, large (or null when scaling is set)."
   }
 
+  # Three ways to size a cluster and they are alternatives, not layers: two ACU
+  # shapes (a preset or a custom range) and one provisioned class. Silently
+  # ignoring the preset when a class is set would be the worst of the three.
   validation {
-    condition     = (var.size == null) != (var.scaling == null)
-    error_message = "Exactly one of size or scaling must be set: pass size = null when using custom scaling."
+    condition     = length([for v in [var.size, var.scaling, var.instance_class] : true if v != null]) == 1
+    error_message = "Exactly one of size, scaling or instance_class must be set: pass size = null when using custom scaling or a provisioned instance_class."
+  }
+}
+
+# The escape hatch from Serverless v2, and deliberately shaped like `scaling`
+# rather than like `size`: the caller names the class instead of picking from a
+# tier list. Presets exist to spare a caller the ACU arithmetic, but the reason
+# to leave Serverless v2 at all is a sizing review that already concluded which
+# class wins — a `medium` that silently meant db.r7g.large would hide exactly
+# the decision the caller came here to make.
+#
+# Serverless v2 stays the default and the right one. It bills a floor
+# continuously and pays off when load varies or disappears; a steady working set
+# with no idle periods gets more memory per euro from a fixed class, plus a
+# buffer pool that does not resize underneath it. That is a post-launch call,
+# made when there is data to answer it.
+#
+# Readers inherit the writer's class: `replicas` builds instances from one
+# definition, and a cluster whose reader is a different size from its writer is
+# a tuning problem rather than an addon-shaped one.
+variable "instance_class" {
+  description = "Provisioned Aurora instance class (e.g. `db.r7g.large`), applied to the writer and every reader, as an alternative to Serverless v2. Null (the default) keeps Serverless v2, sized by `size` or `scaling`."
+  type        = string
+  default     = null
+  nullable    = true
+
+  # db.serverless is not a class a caller picks here: it is what `size` and
+  # `scaling` already mean, and naming it directly would produce a serverless
+  # cluster with no capacity range — accepted by Terraform, rejected by AWS.
+  validation {
+    condition     = var.instance_class == null ? true : (startswith(var.instance_class, "db.") && var.instance_class != "db.serverless")
+    error_message = "instance_class must be a provisioned Aurora class such as db.r7g.large; leave it null and use size/scaling for Serverless v2."
   }
 }
 

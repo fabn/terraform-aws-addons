@@ -16,7 +16,13 @@ locals {
     large  = { min_capacity = 1, max_capacity = 8, seconds_until_auto_pause = null }
   }
 
-  scaling = var.size != null ? local.sizes[var.size] : var.scaling
+  # Serverless v2 unless the caller named a class. The two are exclusive by
+  # construction: a provisioned cluster has no ACU range, and passing one
+  # alongside a fixed class is what AWS rejects.
+  serverless     = var.instance_class == null
+  instance_class = coalesce(var.instance_class, "db.serverless")
+
+  scaling = !local.serverless ? null : (var.size != null ? local.sizes[var.size] : var.scaling)
   # PostgreSQL database names cannot contain hyphens, cluster names can.
   database = coalesce(var.database, replace(var.name, "-", "_"))
 
@@ -70,10 +76,13 @@ module "cluster" {
 
   engine         = "aurora-postgresql"
   engine_version = var.engine_version
-  # Serverless v2 clusters run in provisioned mode with db.serverless
-  # instances; capacity comes from serverlessv2_scaling_configuration.
+  # engine_mode is "provisioned" either way — it is the cluster's billing mode,
+  # not the instance's, and Serverless v2 lives inside it. What actually picks
+  # between the two is the instance class: db.serverless takes its capacity from
+  # serverlessv2_scaling_configuration, a named class takes it from the class and
+  # wants no scaling configuration at all.
   engine_mode                        = "provisioned"
-  cluster_instance_class             = "db.serverless"
+  cluster_instance_class             = local.instance_class
   serverlessv2_scaling_configuration = local.scaling
   # First instance is the writer, every extra one is a reader replica.
   # Performance insights is an instance-level setting on Aurora.

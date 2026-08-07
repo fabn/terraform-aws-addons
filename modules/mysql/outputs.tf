@@ -82,8 +82,13 @@ output "security_group_id" {
   value       = module.cluster.security_group_id
 }
 
+output "instance_class" {
+  description = "Resolved instance class of the writer and every reader: `db.serverless` when sized by `size`/`scaling`, otherwise the provisioned class."
+  value       = local.instance_class
+}
+
 output "scaling" {
-  description = "Resolved Serverless v2 capacity range (from `size` or `scaling`)."
+  description = "Resolved Serverless v2 capacity range (from `size` or `scaling`); null on a provisioned cluster, which has no ACU range."
   value       = local.scaling
 }
 
