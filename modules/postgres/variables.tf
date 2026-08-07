@@ -79,6 +79,105 @@ variable "cluster_family" {
   nullable    = false
 }
 
+# Cloning: create the cluster as a copy-on-write clone of an existing one
+# instead of an empty database. Aurora clones share the source's storage layer
+# and only pay for the pages they change, so a clone is ready in minutes
+# largely regardless of size — the difference between a per-PR database a
+# developer waits for and one that is there when they need it.
+#
+# Two limits are worth knowing before cloning in a loop. AWS allows fifteen
+# copy-on-write clones per source cluster; the sixteenth does not fail, it
+# silently becomes a full copy — same API call, entirely different time and
+# bill. And a clone's lineage is fixed at creation: pointing `clone_from` at a
+# different source later replaces the cluster rather than re-cloning it.
+#
+# A clone is not a replica: no inbound replication means nothing keeps the
+# writer busy, so the scale-to-zero sizes (the mini/small default) work here
+# exactly as they do on an empty cluster.
+variable "clone_from" {
+  description = "Create the cluster as a clone of an existing one instead of empty. Defaults to a copy-on-write clone of the source's latest restorable time; a clone inherits the source's users, schemas and master password."
+  type = object({
+    source_cluster_identifier  = optional(string)
+    source_cluster_resource_id = optional(string)
+    restore_to_time            = optional(string)
+    use_latest_restorable_time = optional(bool)
+    restore_type               = optional(string, "copy-on-write")
+  })
+  default  = null
+  nullable = true
+
+  validation {
+    condition     = var.clone_from == null ? true : (var.clone_from.source_cluster_identifier == null) != (var.clone_from.source_cluster_resource_id == null)
+    error_message = "clone_from must set exactly one of source_cluster_identifier or source_cluster_resource_id."
+  }
+
+  # Restoring to a point in time and tracking the latest one are alternatives,
+  # and AWS needs exactly one of them.
+  validation {
+    condition     = var.clone_from == null ? true : !(var.clone_from.restore_to_time != null && coalesce(var.clone_from.use_latest_restorable_time, false))
+    error_message = "clone_from cannot set both restore_to_time and use_latest_restorable_time."
+  }
+
+  validation {
+    condition     = var.clone_from == null ? true : (var.clone_from.restore_to_time != null || coalesce(var.clone_from.use_latest_restorable_time, true))
+    error_message = "clone_from with use_latest_restorable_time = false must set restore_to_time."
+  }
+
+  # full-copy is a real restore: it reads the source's data instead of sharing
+  # its pages, so it costs full storage and scales with database size.
+  validation {
+    condition     = var.clone_from == null ? true : contains(["copy-on-write", "full-copy"], coalesce(var.clone_from.restore_type, "copy-on-write"))
+    error_message = "clone_from.restore_type must be one of: copy-on-write, full-copy."
+  }
+}
+
+# The cheaper sibling of a clone, for restoring a fixed point rather than
+# tracking the source. Same consequences for credentials and schemas; the
+# difference is that a snapshot is a full restore, so it costs full storage and
+# its duration scales with database size.
+variable "snapshot_identifier" {
+  description = "Create the cluster by restoring this DB cluster snapshot (name or ARN) instead of empty. Mutually exclusive with `clone_from`."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.snapshot_identifier == null || var.clone_from == null
+    error_message = "Set either clone_from or snapshot_identifier, not both."
+  }
+}
+
+# Describes a credential, it does not set one — the distinction is the whole
+# point of the name. A restored cluster's master password came off the source's
+# storage volume, and `restore-db-cluster-to-point-in-time` has no master_*
+# parameter at all: there is no API surface through which this module could
+# change it. Anything that tried would have to be an `ALTER USER` against the
+# running cluster, which is a job for whatever seeds the environment, not for
+# Terraform.
+#
+# So this is the caller telling the addon a password it already knows, purely so
+# `sensitive_env` can compose DATABASE_URL as it does for an empty cluster.
+# Leave it out and `sensitive_env` is empty — the same honest answer the addon
+# gives when RDS owns the password. Pass it wrong and nothing fails at apply:
+# the cluster is fine and the published URL simply will not authenticate.
+#
+# The value goes into Terraform state, like every other credential the addon
+# publishes. It must also be URL-safe: it lands in DATABASE_URL verbatim, and
+# nothing here percent-encodes it (the passwords this module generates avoid
+# special characters for the same reason).
+variable "source_master_password" {
+  description = "Master password the restored source already has, used only to compose `sensitive_env` — it is never applied to the cluster. Only valid with `clone_from`/`snapshot_identifier`; must be URL-safe. Omit to leave `sensitive_env` empty."
+  type        = string
+  sensitive   = true
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.source_master_password == null || var.clone_from != null || var.snapshot_identifier != null
+    error_message = "source_master_password only applies when restoring (clone_from or snapshot_identifier); an empty cluster generates its own password."
+  }
+}
+
 variable "backup_retention_period" {
   description = "Days of automated backups to retain."
   type        = number

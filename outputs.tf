@@ -30,6 +30,7 @@ output "mysql" {
     database           = module.mysql[0].database
     username           = module.mysql[0].username
     cluster_identifier = module.mysql[0].cluster_identifier
+    cluster_arn        = module.mysql[0].cluster_arn
     security_group_id  = module.mysql[0].security_group_id
     scaling            = module.mysql[0].scaling
 
@@ -47,6 +48,7 @@ output "postgres" {
     database           = module.postgres[0].database
     username           = module.postgres[0].username
     cluster_identifier = module.postgres[0].cluster_identifier
+    cluster_arn        = module.postgres[0].cluster_arn
     security_group_id  = module.postgres[0].security_group_id
     scaling            = module.postgres[0].scaling
 

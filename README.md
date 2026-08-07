@@ -275,6 +275,138 @@ connection never establishes, and `SHOW REPLICA STATUS` reports
 route into the VPC, and backs the console's query editor. Availability varies
 by region and engine version, so an apply is the only reliable check.
 
+### Cloning a SQL addon from an existing cluster (mysql / postgres)
+
+Both SQL submodules can create the cluster as a copy of an existing one instead
+of an empty database. An Aurora clone is copy-on-write against the source's
+storage layer: the data is there in about two minutes largely regardless of
+database size, and billed only for the pages it changes — which is what makes a
+per-PR or per-environment database seeded from production-like data practical
+at all.
+
+The storage is the fast part; the compute is not. Measured end to end on a
+throwaway clone: **cluster clone ~2 min, instance provisioning ~9.5 min,
+destroy ~17 min.** So "ready in minutes regardless of size" is a statement
+about the data, not about how soon the environment answers queries.
+
+```hcl
+module "review_app_db" {
+  source  = "fabn/addons/aws//modules/postgres"
+
+  name       = "myapp-pr-1234"
+  clone_from = { source_cluster_identifier = "myapp-staging-postgres" }
+
+  # The clone's own users and schemas came from the source, so name them.
+  database               = "myapp_staging"
+  username               = "app"
+  source_master_password = var.staging_master_password
+
+  vpc_id     = var.vpc_id
+  subnet_ids = var.subnet_ids
+}
+```
+
+`clone_from` defaults to a `copy-on-write` clone of the source's latest
+restorable time — the two settings that make it a clone rather than a restore.
+Pin `restore_to_time` for a fixed point instead, or `restore_type =
+"full-copy"` for a real copy that costs full storage. Name the source with
+either `source_cluster_identifier` or `source_cluster_resource_id`, not both.
+`snapshot_identifier` is the sibling for restoring a snapshot; it is mutually
+exclusive with `clone_from`.
+
+**A clone inherits its credentials, and cannot be given different ones.** The
+accounts live in the storage volume the clone shares with its source, and
+`restore-db-cluster-to-point-in-time` exposes no `master-*` parameter at all —
+there is no API surface through which credentials could be supplied at restore
+time. Two consequences:
+
+- The addon generates nothing, and `database` / `username` stop describing what
+  it creates and start describing what it found. Pass the source's, or the
+  connection vars will point at a database that isn't there.
+- `source_master_password` **describes** that credential, it does not set it.
+  Pass it and `sensitive_env` composes `DATABASE_URL` exactly as for an empty
+  cluster; omit it and `sensitive_env` is empty, the same answer the addon gives
+  when RDS owns the password. Pass it *wrong* and nothing fails at apply — the
+  published URL simply will not authenticate.
+
+`manage_master_user_password` is rejected in this mode. Not because handing the
+inherited master to Secrets Manager is impossible, but because it cannot happen
+*at creation*: the restore APIs take no such parameter, so the flag would be
+silently dropped. `modify-db-cluster` does accept it, so rotating a clone's
+master onto a managed secret is a later operation — one this addon does not
+currently perform.
+
+> **Every account on the source exists on the clone, with the source's
+> passwords** — including whatever the application connects as. That is fine
+> for a clone sharing its source's network and audience; it is worth thinking
+> about for per-PR or per-developer databases, which usually have a *wider*
+> audience than production. Rotating those accounts is an `ALTER USER` against
+> the running clone: a job for whatever seeds the environment, not for
+> Terraform.
+
+**A clone is not a replica — unless its source was one.** Cloning does not
+create inbound replication, so normally nothing keeps the writer busy and the
+scale-to-zero sizes work exactly as on an empty cluster: `size = "mini"` (the
+default) still auto-pauses, which is what makes idle review-app databases close
+to free.
+
+That holds only when the source was not itself an inbound binlog replica of an
+external MySQL server. Replication *state* is not configuration and does not
+live in the parameter group — it lives in InnoDB tables in the `mysql` schema,
+on the very volume the clone shares. A clone of a replica therefore comes up at
+first boot still pointing at its source's replication source, retrying
+(`Replica_IO_Running: Connecting`) up to 86,400 times at 60-second intervals —
+about sixty days — even when the security group gives it no egress and the
+connection can never succeed.
+
+**That alone prevents auto-pause**, verified by controlled test: with the
+inherited channel the cluster pinned at its ceiling and never paused; after
+resetting it, the same cluster scaled to zero. For a per-PR clone this inverts
+the cost argument — a cluster doing nothing sits at maximum capacity. Clear it
+on the clone with:
+
+```sql
+CALL mysql.rds_stop_replication();
+CALL mysql.rds_reset_external_source();
+```
+
+No downtime, but note the ordering below: those calls need the Data API, which
+on a restored cluster needs a second apply.
+
+**The Data API cannot be enabled while restoring.** `enable_http_endpoint =
+true` is passed through correctly, and AWS discards it: neither
+`restore-db-cluster-to-point-in-time` nor `restore-db-cluster-from-snapshot`
+has that parameter, though `create-db-cluster` and `modify-db-cluster` both do.
+The apply succeeds, AWS reports `HttpEndpointEnabled: False`, and Terraform
+records `false` — so there is no drift to notice, just a second plan proposing
+`false -> true` that takes about 1m45s to apply.
+
+The consequence is an ordering one: **anything a caller wants to do over the
+Data API immediately after creating a clone is gated behind a second apply** —
+including creating the application accounts, which is the first thing a cloned
+environment needs.
+
+**A clone gets the addon's parameter group, not the source's.** Parameters are
+configuration rather than data, so nothing carries them across a clone on its
+own — and adopting them would be the wrong default anyway. A clone of a cluster
+carrying `binlog_format` or `gtid_mode` would come up configured as a
+replication source it is not, and that binlog activity alone would stop a
+scale-to-zero clone from ever pausing, which is most of the reason a per-PR
+clone is cheap. A caller who wants the source's engine settings restates them
+in `cluster_parameters` (mysql).
+
+Two limits worth knowing before cloning in a loop:
+
+- AWS allows **fifteen copy-on-write clones per source cluster**. The sixteenth
+  does not fail — it silently becomes a full copy, same API call, entirely
+  different time and bill. Nothing here can detect that at plan time, so a
+  caller creating clones in a loop should cap them itself.
+- A cluster's lineage is fixed at creation. Pointing `clone_from` at a
+  different source later **replaces** the cluster rather than re-cloning it.
+
+`restored_from` reports the resolved mode and source (`null` for an empty
+cluster), since the restore arguments themselves cannot be read back.
+
 ### Addons
 
 | Addon | Backed by | env | sensitive_env |

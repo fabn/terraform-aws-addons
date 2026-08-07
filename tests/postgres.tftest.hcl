@@ -78,7 +78,7 @@ run "default_size_is_mini" {
   }
 
   assert {
-    condition     = output.sensitive_env.PGPASSWORD == random_password.admin.result
+    condition     = output.sensitive_env.PGPASSWORD == one(random_password.admin[*].result)
     error_message = "PGPASSWORD should be the generated password"
   }
 }
@@ -346,5 +346,313 @@ run "modifications_can_be_deferred_to_the_maintenance_window" {
   assert {
     condition     = output.preferred_maintenance_window == "mon:03:00-mon:04:00"
     error_message = "deferred changes should land in the addon's off-peak maintenance window"
+  }
+}
+
+run "clone_defaults_to_a_copy_on_write_clone_of_the_latest_time" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name       = "myapp-postgres"
+    database   = "prod_app"
+    username   = "source_admin"
+    clone_from = { source_cluster_identifier = "prod-postgres" }
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.restored_from.mode == "copy-on-write" && output.restored_from.source == "prod-postgres"
+    error_message = "clone_from should default to a copy-on-write clone of the named source"
+  }
+
+  # The clone inherits the source's credentials, so there is nothing to
+  # generate and nothing to publish.
+  assert {
+    condition     = length(random_password.admin) == 0
+    error_message = "no password should be generated for a cluster that inherits the source's"
+  }
+
+  assert {
+    condition     = length(output.sensitive_env) == 0
+    error_message = "sensitive_env should be empty when the source's password was not supplied"
+  }
+
+  # The plaintext half still stands: the caller names the source's user and
+  # database, and the app needs both to connect.
+  assert {
+    condition     = output.env.PGUSER == "source_admin" && output.env.PGDATABASE == "prod_app"
+    error_message = "the plaintext env contract should describe the inherited user and database"
+  }
+
+  # A clone has no inbound replication, so the scale-to-zero default applies
+  # here exactly as it does to an empty cluster.
+  assert {
+    condition     = output.scaling.min_capacity == 0
+    error_message = "a clone should still default to a scale-to-zero size"
+  }
+}
+
+run "clone_with_the_source_password_completes_the_contract" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name                   = "myapp-postgres"
+    database               = "prod_app"
+    username               = "source_admin"
+    source_master_password = "sourcepassword"
+    clone_from             = { source_cluster_identifier = "prod-postgres" }
+    vpc_id                 = "vpc-12345"
+    subnet_ids             = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.sensitive_env.PGPASSWORD == "sourcepassword"
+    error_message = "a supplied source password should be published like a generated one"
+  }
+
+  assert {
+    condition     = startswith(output.sensitive_env.DATABASE_URL, "postgresql://source_admin:sourcepassword@")
+    error_message = "DATABASE_URL should compose from the source's credentials"
+  }
+
+  assert {
+    condition     = endswith(output.sensitive_env.DATABASE_URL, "/prod_app")
+    error_message = "DATABASE_URL should point at the inherited database"
+  }
+}
+
+run "clone_can_pin_a_point_in_time" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name = "myapp-postgres"
+    clone_from = {
+      source_cluster_resource_id = "cluster-ABCDEF123456"
+      restore_to_time            = "2026-08-05T12:00:00Z"
+      restore_type               = "full-copy"
+    }
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.restored_from.mode == "full-copy" && output.restored_from.source == "cluster-ABCDEF123456"
+    error_message = "a pinned full-copy restore should be reported as such"
+  }
+}
+
+run "snapshot_restore_is_reported_as_its_own_mode" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name                = "myapp-postgres"
+    snapshot_identifier = "prod-postgres-2026-08-05"
+    vpc_id              = "vpc-12345"
+    subnet_ids          = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.restored_from.mode == "snapshot" && output.restored_from.source == "prod-postgres-2026-08-05"
+    error_message = "a snapshot restore should be reported as a snapshot"
+  }
+
+  assert {
+    condition     = length(random_password.admin) == 0
+    error_message = "a snapshot restore inherits the source's password too"
+  }
+}
+
+run "an_empty_cluster_reports_no_lineage" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name       = "myapp-postgres"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.restored_from == null
+    error_message = "a cluster created empty should report no restore lineage"
+  }
+
+  assert {
+    condition     = length(output.sensitive_env) == 2
+    error_message = "the default contract should be unaffected by the restore options"
+  }
+}
+
+run "rejects_clone_and_snapshot_together" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name                = "myapp-postgres"
+    clone_from          = { source_cluster_identifier = "prod-postgres" }
+    snapshot_identifier = "prod-postgres-2026-08-05"
+    vpc_id              = "vpc-12345"
+    subnet_ids          = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.snapshot_identifier]
+}
+
+run "rejects_a_clone_without_exactly_one_source" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name = "myapp-postgres"
+    clone_from = {
+      source_cluster_identifier  = "prod-postgres"
+      source_cluster_resource_id = "cluster-ABCDEF123456"
+    }
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.clone_from]
+}
+
+run "rejects_a_clone_with_no_source_at_all" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name       = "myapp-postgres"
+    clone_from = { restore_to_time = "2026-08-05T12:00:00Z" }
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.clone_from]
+}
+
+run "rejects_both_ways_of_choosing_a_restore_point" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name = "myapp-postgres"
+    clone_from = {
+      source_cluster_identifier  = "prod-postgres"
+      restore_to_time            = "2026-08-05T12:00:00Z"
+      use_latest_restorable_time = true
+    }
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.clone_from]
+}
+
+run "rejects_neither_way_of_choosing_a_restore_point" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name = "myapp-postgres"
+    clone_from = {
+      source_cluster_identifier  = "prod-postgres"
+      use_latest_restorable_time = false
+    }
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.clone_from]
+}
+
+run "rejects_an_unknown_restore_type" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name = "myapp-postgres"
+    clone_from = {
+      source_cluster_identifier = "prod-postgres"
+      restore_type              = "copy-on-read"
+    }
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.clone_from]
+}
+
+run "rejects_a_source_password_on_an_empty_cluster" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name                   = "myapp-postgres"
+    source_master_password = "sourcepassword"
+    vpc_id                 = "vpc-12345"
+    subnet_ids             = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.source_master_password]
+}
+
+run "postgres_publishes_the_cluster_arn" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name       = "myapp-postgres"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  # The Data API and IAM policies want the ARN, and reassembling it from
+  # identifier + region + account is the caller's problem this output removes.
+  assert {
+    condition     = output.cluster_arn != null
+    error_message = "the cluster ARN should be published rather than left to be rebuilt"
   }
 }

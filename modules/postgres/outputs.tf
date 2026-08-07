@@ -14,13 +14,20 @@ output "env" {
   }
 }
 
+# Empty when the cluster was restored and the caller did not pass
+# `source_master_password`: the credential is then the source's, and the addon was
+# never told it. That is the honest answer rather than a degraded one — a
+# fabricated URL would fail at connect time instead of here.
 output "sensitive_env" {
-  description = "Credential vars (DATABASE_URL uses the postgresql scheme expected by the Rails pg adapter)."
+  description = "Credential vars (DATABASE_URL uses the postgresql scheme expected by the Rails pg adapter). Empty when a restored cluster was given no source_master_password."
   sensitive   = true
-  value = {
-    DATABASE_URL = "postgresql://${var.username}:${random_password.admin.result}@${module.cluster.cluster_endpoint}:5432/${local.database}"
-    PGPASSWORD   = random_password.admin.result
-  }
+  # tomap on both branches so the output keeps one type. A bare `{}` against a
+  # populated object leaves Terraform unifying two different object types, which
+  # surfaces as a type error in the caller rather than here.
+  value = local.password == null ? tomap({}) : tomap({
+    DATABASE_URL = "postgresql://${var.username}:${local.password}@${module.cluster.cluster_endpoint}:5432/${local.database}"
+    PGPASSWORD   = local.password
+  })
 }
 
 output "host" {
@@ -33,19 +40,35 @@ output "reader_host" {
   value       = module.cluster.cluster_reader_endpoint
 }
 
+# The cluster's lineage, for callers that need to tell an empty database from a
+# copy of one — and for making the mode visible in a plan at all, since the
+# restore arguments themselves are not readable back off the module.
+output "restored_from" {
+  description = "How the cluster was created: null when empty, otherwise the restore mode (copy-on-write, full-copy or snapshot) and its source."
+  value = !local.restored ? null : {
+    mode   = var.clone_from != null ? coalesce(var.clone_from.restore_type, "copy-on-write") : "snapshot"
+    source = var.clone_from != null ? coalesce(var.clone_from.source_cluster_identifier, var.clone_from.source_cluster_resource_id) : var.snapshot_identifier
+  }
+}
+
 output "database" {
-  description = "Name of the created database."
+  description = "Name of the database the connection vars point at (created here, or the source's on a restored cluster)."
   value       = local.database
 }
 
 output "username" {
-  description = "Master username."
+  description = "Master username the connection vars use (created here, or the source's on a restored cluster)."
   value       = var.username
 }
 
 output "cluster_identifier" {
   description = "Cluster identifier."
   value       = module.cluster.cluster_id
+}
+
+output "cluster_arn" {
+  description = "ARN of the cluster, as the Data API and IAM policies want it — saves callers reassembling it from identifier, region and account."
+  value       = module.cluster.cluster_arn
 }
 
 output "security_group_id" {
