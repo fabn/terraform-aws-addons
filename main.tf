@@ -24,6 +24,7 @@ module "mysql" {
   size           = local.mysql.scaling != null || local.mysql.instance_class != null ? null : coalesce(local.mysql.size, "mini")
   scaling        = local.mysql.scaling
   instance_class = local.mysql.instance_class
+  instances      = coalesce(local.mysql.instances, {})
 
   # The default database is named after the stack, not the addon instance.
   database       = coalesce(local.mysql.database, replace(var.name, "-", "_"))
@@ -58,6 +59,7 @@ module "postgres" {
   size           = local.postgres.scaling != null || local.postgres.instance_class != null ? null : coalesce(local.postgres.size, "mini")
   scaling        = local.postgres.scaling
   instance_class = local.postgres.instance_class
+  instances      = coalesce(local.postgres.instances, {})
 
   # The default database is named after the stack, not the addon instance.
   database       = coalesce(local.postgres.database, replace(var.name, "-", "_"))

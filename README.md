@@ -100,7 +100,9 @@ Aurora PostgreSQL >= 15.4).
 
 Readers: `replicas = n` adds reader instances (default 0, writer only).
 Serverless v2 readers share the cluster's ACU range but each instance
-scales independently within it; readers double as failover targets.
+scales independently within it; readers double as failover targets. A reader
+can depart from the cluster's class or failover priority through `instances`
+(see mixed clusters below).
 
 Slow queries are logged by default (`long_query_time = 2`s) and exported
 to CloudWatch Logs; opt out with `slow_query_log = false`. mysql uses the
@@ -123,8 +125,7 @@ mysql = {
 }
 ```
 
-Three ways to size a SQL addon, and they are **alternatives rather than
-layers** — exactly one must be set:
+Three ways to size a SQL addon:
 
 | | Sizing | Scales to zero |
 |---|---|---|
@@ -132,21 +133,58 @@ layers** — exactly one must be set:
 | `scaling` | custom ACU range | with `min_capacity = 0` |
 | `instance_class` | fixed instance | no |
 
-Setting more than one fails at plan rather than silently ignoring the preset.
-`instance_class` also rejects `db.serverless` itself: that is what `size` and
-`scaling` already mean, and naming it directly would build a serverless
+`size` is a preset ACU range and stands alone — setting it beside `scaling` or
+`instance_class` fails at plan rather than silently ignoring it. The other two
+do combine, and that combination is a mixed cluster (below).
+`instance_class` rejects `db.serverless` itself: that is what `size` and
+`scaling` already mean, and naming it there would build a serverless
 cluster with no capacity range — accepted by Terraform, rejected by AWS.
 
-Two deliberate omissions:
+**No provisioned presets**, deliberately. `instance_class` is the escape hatch
+where the caller names the class, the way `scaling` already is for capacity.
+The reason to leave Serverless v2 is a sizing review that concluded which class
+wins; a `medium` that silently meant `db.r7g.large` would hide the decision
+the caller came here to make.
 
-- **No provisioned presets.** `instance_class` is the escape hatch where the
-  caller names the class, the way `scaling` already is for capacity. The
-  reason to leave Serverless v2 is a sizing review that concluded which class
-  wins; a `medium` that silently meant `db.r7g.large` would hide the decision
-  the caller came here to make.
-- **Readers inherit the writer's class.** `replicas` builds every instance
-  from one definition. A reader sized differently from its writer is a tuning
-  problem rather than an addon-shaped one.
+##### Mixed clusters, and converting one to the other
+
+Aurora runs Serverless v2 and provisioned instances side by side, and
+prescribes exactly that shape for converting a running cluster from one to the
+other: give a reader the target class, fail over onto it, then convert what
+used to be the writer. Going through `instance_class` alone instead means
+rebooting the writer.
+
+`instances` names an instance and departs from the cluster default:
+
+```hcl
+mysql = {
+  replicas  = 1
+  instances = { "2" = { instance_class = "db.t4g.medium", promotion_tier = 0 } }
+}
+```
+
+Keys are instance numbers, `"1"` through `1 + replicas`. They address
+instances rather than roles — `"1"` is the writer *at creation*, and a failover
+swaps that without anything in the configuration following it. They are also
+the identifier suffixes AWS assigns (`<name>-<key>`), so lowering `replicas`
+removes the highest-numbered instance whether or not a failover has made it
+the writer.
+
+Three things to know before reaching for this:
+
+- **`promotion_tier` does more than order failover** on a Serverless v2
+  instance. Tiers 0-1 hold a reader at no less than the writer's capacity so it
+  can take over immediately, estimating an equivalent when the writer is
+  provisioned; tiers 2-15 let it scale on its own workload. A serverless reader
+  left in tier 0 beside a large provisioned writer bills for the writer's
+  capacity.
+- **A provisioned instance never auto-pauses**, and its presence keeps a
+  Serverless v2 writer awake too. A cluster that scales to zero stops doing so
+  the moment one is added.
+- **The ACU range outlives the serverless instances.** AWS keeps a range it was
+  once given, so a cluster converted to provisioned throughout goes on stating
+  `scaling` beside `instance_class` — dropping it produces a diff that never
+  applies.
 
 #### redis / memcached — ElastiCache node types
 

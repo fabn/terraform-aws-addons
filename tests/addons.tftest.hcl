@@ -448,7 +448,29 @@ run "rejects_size_and_instance_class_on_the_same_addon" {
   expect_failures = [var.addons]
 }
 
-run "rejects_scaling_and_instance_class_on_the_same_addon" {
+run "sql_addon_accepts_a_mixed_cluster" {
+  command = apply
+
+  variables {
+    name             = "myapp"
+    production_grade = false
+    vpc_id           = "vpc-12345"
+    subnet_ids       = ["subnet-1", "subnet-2"]
+    addons = {
+      mysql = {
+        replicas  = 1
+        instances = { "2" = { instance_class = "db.t4g.medium", promotion_tier = 0 } }
+      }
+    }
+  }
+
+  assert {
+    condition     = output.mysql.instances["1"].instance_class == "db.serverless" && output.mysql.instances["2"].instance_class == "db.t4g.medium"
+    error_message = "the wrapper should carry per-instance overrides through to the submodule"
+  }
+}
+
+run "rejects_instances_on_a_cache_addon" {
   command = plan
 
   variables {
@@ -456,10 +478,7 @@ run "rejects_scaling_and_instance_class_on_the_same_addon" {
     vpc_id     = "vpc-12345"
     subnet_ids = ["subnet-1", "subnet-2"]
     addons = {
-      mysql = {
-        scaling        = { min_capacity = 0, max_capacity = 4 }
-        instance_class = "db.r7g.large"
-      }
+      redis = { instances = { "1" = { promotion_tier = 0 } } }
     }
   }
 

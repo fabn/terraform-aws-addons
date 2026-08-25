@@ -752,8 +752,8 @@ run "rejects_a_preset_alongside_a_provisioned_class" {
   expect_failures = [var.size]
 }
 
-run "rejects_an_acu_range_alongside_a_provisioned_class" {
-  command = plan
+run "an_acu_range_survives_a_provisioned_default_class" {
+  command = apply
 
   module {
     source = "./modules/postgres"
@@ -769,6 +769,183 @@ run "rejects_an_acu_range_alongside_a_provisioned_class" {
     instance_class = "db.r7g.large"
     vpc_id         = "vpc-12345"
     subnet_ids     = ["subnet-1", "subnet-2"]
+  }
+
+  # AWS keeps a capacity range it was once given even after the last serverless
+  # instance leaves, so a cluster converted to provisioned throughout has to go
+  # on stating it or the diff never applies.
+  assert {
+    condition     = output.scaling.max_capacity == 4
+    error_message = "the cluster should keep the ACU range the caller asked for"
+  }
+
+  assert {
+    condition     = output.instance_class == "db.r7g.large"
+    error_message = "the default class should still be the provisioned one"
+  }
+}
+
+run "one_instance_can_leave_the_default_class" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name       = "myapp-postgres"
+    replicas   = 1
+    instances  = { "2" = { instance_class = "db.t4g.medium", promotion_tier = 0 } }
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  # The shape AWS prescribes for converting a running cluster: the reader takes
+  # the target class and a failover onto it makes it the writer.
+  assert {
+    condition     = output.instances["1"].instance_class == "db.serverless"
+    error_message = "the instance that was not named should keep the cluster default"
+  }
+
+  assert {
+    condition     = output.instances["2"].instance_class == "db.t4g.medium"
+    error_message = "a named instance should take its own class"
+  }
+
+  assert {
+    condition     = output.instances["2"].promotion_tier == 0
+    error_message = "a named instance should take its own promotion tier"
+  }
+
+  assert {
+    condition     = output.scaling.max_capacity == 1
+    error_message = "the cluster should keep the ACU range its serverless instance runs on"
+  }
+}
+
+run "a_serverless_instance_can_sit_beside_a_provisioned_default" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name = "myapp-postgres"
+    size = null
+    scaling = {
+      min_capacity = 0
+      max_capacity = 4
+    }
+    instance_class = "db.r7g.large"
+    replicas       = 1
+    instances      = { "2" = { instance_class = "db.serverless", promotion_tier = 15 } }
+    vpc_id         = "vpc-12345"
+    subnet_ids     = ["subnet-1", "subnet-2"]
+  }
+
+  # The reverse direction: tier 15 keeps the reader scaling on its own workload
+  # instead of tracking the provisioned writer's capacity.
+  assert {
+    condition     = output.instances["1"].instance_class == "db.r7g.large" && output.instances["2"].instance_class == "db.serverless"
+    error_message = "a mixed cluster should be expressible in both directions"
+  }
+}
+
+run "instances_defaults_to_a_uniform_cluster" {
+  command = apply
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name       = "myapp-postgres"
+    replicas   = 2
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = length([for k, v in output.instances : k if v.instance_class != "db.serverless"]) == 0
+    error_message = "nothing should change for a caller who never mentions instances"
+  }
+
+  assert {
+    condition     = length([for k, v in output.instances : k if v.promotion_tier != null]) == 0
+    error_message = "an unmentioned instance should leave its promotion tier to AWS"
+  }
+}
+
+run "rejects_an_override_on_an_instance_the_cluster_does_not_have" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name       = "myapp-postgres"
+    instances  = { "2" = { instance_class = "db.t4g.medium" } }
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  # replicas is 0, so there is no instance "2" and the override would be
+  # ignored in silence.
+  expect_failures = [var.instances]
+}
+
+run "rejects_a_serverless_instance_on_a_cluster_with_no_acu_range" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name           = "myapp-postgres"
+    size           = null
+    instance_class = "db.r7g.large"
+    replicas       = 1
+    instances      = { "2" = { instance_class = "db.serverless" } }
+    vpc_id         = "vpc-12345"
+    subnet_ids     = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.instances]
+}
+
+run "rejects_a_promotion_tier_that_is_not_one" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name       = "myapp-postgres"
+    replicas   = 1
+    instances  = { "2" = { promotion_tier = 16 } }
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.instances]
+}
+
+run "rejects_sizing_a_cluster_no_way_at_all" {
+  command = plan
+
+  module {
+    source = "./modules/postgres"
+  }
+
+  variables {
+    name       = "myapp-postgres"
+    size       = null
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
   }
 
   expect_failures = [var.size]

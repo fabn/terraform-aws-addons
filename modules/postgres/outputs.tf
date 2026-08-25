@@ -82,12 +82,20 @@ output "security_group_id" {
 }
 
 output "instance_class" {
-  description = "Resolved instance class of the writer and every reader: `db.serverless` when sized by `size`/`scaling`, otherwise the provisioned class."
-  value       = local.instance_class
+  description = "The cluster's default instance class: `db.serverless` when sized by `size`/`scaling`, otherwise the provisioned class. Instances that override it in `instances` are not covered by this — see the `instances` output."
+  value       = local.default_instance_class
+}
+
+output "instances" {
+  description = "Resolved class and promotion tier of every instance, keyed by instance number. A mixed cluster is one whose classes are not all the same."
+  value = { for k, v in local.instances : k => {
+    instance_class = local.instance_classes[k]
+    promotion_tier = v.promotion_tier
+  } }
 }
 
 output "scaling" {
-  description = "Resolved Serverless v2 capacity range (from `size` or `scaling`); null on a provisioned cluster, which has no ACU range."
+  description = "Resolved Serverless v2 capacity range (from `size` or `scaling`); null when the caller asked for none. AWS keeps a range it was once given, so a cluster converted to provisioned throughout is expected to keep stating it."
   value       = local.scaling
 }
 
