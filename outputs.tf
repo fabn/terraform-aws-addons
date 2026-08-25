@@ -34,6 +34,7 @@ output "mysql" {
     security_group_id  = module.mysql[0].security_group_id
     scaling            = module.mysql[0].scaling
     instance_class     = module.mysql[0].instance_class
+    instances          = module.mysql[0].instances
 
     preferred_maintenance_window = module.mysql[0].preferred_maintenance_window
     preferred_backup_window      = module.mysql[0].preferred_backup_window
@@ -53,6 +54,7 @@ output "postgres" {
     security_group_id  = module.postgres[0].security_group_id
     scaling            = module.postgres[0].scaling
     instance_class     = module.postgres[0].instance_class
+    instances          = module.postgres[0].instances
 
     preferred_maintenance_window = module.postgres[0].preferred_maintenance_window
     preferred_backup_window      = module.postgres[0].preferred_backup_window

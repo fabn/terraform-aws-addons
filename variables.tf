@@ -18,7 +18,8 @@ variable "name" {
 # `size` picks a preset plan (mini, small, medium, large — mini being the
 # default); custom computational resources go in the addon-specific
 # attribute instead (`scaling` for mysql/postgres ACU ranges,
-# `instance_class` to leave Serverless v2 for provisioned instances, `node`
+# `instance_class` to leave Serverless v2 for provisioned instances — one
+# instance at a time through `instances` — and `node`
 # for redis/memcached node type/count). Per-addon knobs beyond sizing live
 # on the submodules, meant to be used directly for those cases.
 variable "addons" {
@@ -35,6 +36,12 @@ variable "addons" {
     }))
     # mysql/postgres only: provisioned instance class instead of Serverless v2.
     instance_class = optional(string)
+    # mysql/postgres only: per-instance class/tier overrides, keyed by instance
+    # number — a mixed Serverless v2 / provisioned cluster.
+    instances = optional(map(object({
+      instance_class = optional(string)
+      promotion_tier = optional(number)
+    })))
     # redis/memcached only: custom node type (+ node count on memcached).
     node = optional(object({
       node_type = string
@@ -61,16 +68,9 @@ variable "addons" {
     error_message = "Each addon may set either size or custom resources (scaling/instance_class/node), not both."
   }
 
-  # Two ways to size a SQL addon beyond the presets, and they are alternatives:
-  # an ACU range keeps Serverless v2, a class leaves it.
   validation {
-    condition     = alltrue([for k, spec in var.addons : spec.scaling == null || spec.instance_class == null])
-    error_message = "scaling and instance_class are alternatives: an ACU range keeps Serverless v2, a provisioned class replaces it."
-  }
-
-  validation {
-    condition     = alltrue([for k, spec in var.addons : (spec.scaling == null && spec.instance_class == null && spec.database == null && spec.username == null && spec.slow_query_log == null) || contains(["mysql", "postgres"], k)])
-    error_message = "scaling, instance_class, database, username and slow_query_log only apply to the mysql and postgres addons."
+    condition     = alltrue([for k, spec in var.addons : (spec.scaling == null && spec.instance_class == null && spec.instances == null && spec.database == null && spec.username == null && spec.slow_query_log == null) || contains(["mysql", "postgres"], k)])
+    error_message = "scaling, instance_class, instances, database, username and slow_query_log only apply to the mysql and postgres addons."
   }
 
   validation {

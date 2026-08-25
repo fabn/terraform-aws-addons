@@ -16,13 +16,27 @@ locals {
     large  = { min_capacity = 1, max_capacity = 8, seconds_until_auto_pause = null }
   }
 
-  # Serverless v2 unless the caller named a class. The two are exclusive by
-  # construction: a provisioned cluster has no ACU range, and passing one
-  # alongside a fixed class is what AWS rejects.
-  serverless     = var.instance_class == null
-  instance_class = coalesce(var.instance_class, "db.serverless")
+  # Serverless v2 unless the caller named a class. `instances` overrides this
+  # per instance, which is what makes a mixed cluster expressible.
+  default_instance_class = coalesce(var.instance_class, "db.serverless")
 
-  scaling = !local.serverless ? null : (var.size != null ? local.sizes[var.size] : var.scaling)
+  # Instance "1" is the writer at creation; the rest are readers. The keys
+  # address instances, not roles: a failover swaps which one is the writer and
+  # nothing here follows it. They are also the identifier suffixes AWS assigns
+  # (`<name>-<key>`), so renumbering an existing cluster replaces instances.
+  instances = { for i in range(1 + var.replicas) : tostring(i + 1) => {
+    instance_class = try(var.instances[tostring(i + 1)].instance_class, null)
+    promotion_tier = try(var.instances[tostring(i + 1)].promotion_tier, null)
+  } }
+
+  instance_classes = { for k, v in local.instances : k => coalesce(v.instance_class, local.default_instance_class) }
+
+  # The ACU range is the caller's, not a function of the default class. A mixed
+  # cluster needs one for its Serverless v2 instances while the default class is
+  # provisioned, and AWS keeps a range it was once given even after the last
+  # serverless instance leaves the cluster — so dropping it from the
+  # configuration would leave a diff that never applies.
+  scaling = var.size != null ? local.sizes[var.size] : var.scaling
   # PostgreSQL database names cannot contain hyphens, cluster names can.
   database = coalesce(var.database, replace(var.name, "-", "_"))
 
@@ -78,15 +92,18 @@ module "cluster" {
   engine_version = var.engine_version
   # engine_mode is "provisioned" either way — it is the cluster's billing mode,
   # not the instance's, and Serverless v2 lives inside it. What actually picks
-  # between the two is the instance class: db.serverless takes its capacity from
-  # serverlessv2_scaling_configuration, a named class takes it from the class and
-  # wants no scaling configuration at all.
+  # between the two is the instance class, per instance: db.serverless takes its
+  # capacity from serverlessv2_scaling_configuration, a named class takes it from
+  # the class. A cluster can hold both.
   engine_mode                        = "provisioned"
-  cluster_instance_class             = local.instance_class
+  cluster_instance_class             = local.default_instance_class
   serverlessv2_scaling_configuration = local.scaling
-  # First instance is the writer, every extra one is a reader replica.
+  # First instance is the writer, every extra one is a reader replica. A null
+  # class falls back to cluster_instance_class upstream.
   # Performance insights is an instance-level setting on Aurora.
-  instances = { for i in range(1 + var.replicas) : tostring(i + 1) => {
+  instances = { for k, v in local.instances : k => {
+    instance_class                        = v.instance_class
+    promotion_tier                        = v.promotion_tier
     performance_insights_enabled          = var.monitoring_enabled
     performance_insights_retention_period = var.monitoring_enabled ? 7 : null
   } }

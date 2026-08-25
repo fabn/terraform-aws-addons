@@ -14,12 +14,18 @@ variable "size" {
     error_message = "size must be one of: mini, small, medium, large (or null when scaling is set)."
   }
 
-  # Three ways to size a cluster and they are alternatives, not layers: two ACU
-  # shapes (a preset or a custom range) and one provisioned class. Silently
-  # ignoring the preset when a class is set would be the worst of the three.
+  # A preset is an ACU range the caller did not spell out, so it stands alone:
+  # silently ignoring it beside a custom range or a class would be the worst of
+  # the three outcomes. `scaling` and `instance_class` are not exclusive of each
+  # other — together they are a mixed cluster, see var.instances.
   validation {
-    condition     = length([for v in [var.size, var.scaling, var.instance_class] : true if v != null]) == 1
-    error_message = "Exactly one of size, scaling or instance_class must be set: pass size = null when using custom scaling or a provisioned instance_class."
+    condition     = var.size == null || (var.scaling == null && var.instance_class == null)
+    error_message = "size is a preset ACU range and stands alone: pass size = null when setting scaling or instance_class."
+  }
+
+  validation {
+    condition     = var.size != null || var.scaling != null || var.instance_class != null
+    error_message = "One of size, scaling or instance_class must be set."
   }
 }
 
@@ -36,11 +42,10 @@ variable "size" {
 # buffer pool that does not resize underneath it. That is a post-launch call,
 # made when there is data to answer it.
 #
-# Readers inherit the writer's class: `replicas` builds instances from one
-# definition, and a cluster whose reader is a different size from its writer is
-# a tuning problem rather than an addon-shaped one.
+# This is the cluster's default class, applied to every instance that does not
+# override it in `instances`.
 variable "instance_class" {
-  description = "Provisioned Aurora instance class (e.g. `db.r7g.large`), applied to the writer and every reader, as an alternative to Serverless v2. Null (the default) keeps Serverless v2, sized by `size` or `scaling`."
+  description = "Provisioned Aurora instance class (e.g. `db.r7g.large`) applied to every instance, as an alternative to Serverless v2. Null (the default) keeps Serverless v2, sized by `size` or `scaling`. Individual instances can depart from it through `instances`."
   type        = string
   default     = null
   nullable    = true
@@ -51,6 +56,62 @@ variable "instance_class" {
   validation {
     condition     = var.instance_class == null ? true : (startswith(var.instance_class, "db.") && var.instance_class != "db.serverless")
     error_message = "instance_class must be a provisioned Aurora class such as db.r7g.large; leave it null and use size/scaling for Serverless v2."
+  }
+}
+
+# Where a cluster stops being uniform. Aurora allows Serverless v2 and
+# provisioned instances side by side, and prescribes exactly that shape for
+# converting a running cluster from one to the other: give a reader the target
+# class, fail over onto it, then convert what used to be the writer. Doing it
+# through the cluster's default class instead means rebooting the writer.
+#
+# Keys are instance numbers, "1" through 1 + replicas, and they address
+# instances rather than roles — "1" is the writer at creation, and a failover
+# swaps that without anything here following it. They are also the identifier
+# suffixes AWS assigns (`<name>-<key>`), so lowering `replicas` removes the
+# highest-numbered instance whether or not a failover has made it the writer.
+#
+# Two consequences worth knowing before reaching for this:
+#
+#   - promotion_tier does more on a Serverless v2 instance than order failover.
+#     Tiers 0 and 1 hold a reader at no less than the writer's capacity so it can
+#     take over immediately, estimating an equivalent for a provisioned writer;
+#     tiers 2-15 let it scale on its own workload. A serverless reader left in
+#     tier 0 beside a large provisioned writer bills for the writer's capacity.
+#   - a provisioned instance never auto-pauses, and its presence keeps a
+#     Serverless v2 writer awake too, so a cluster that scales to zero stops
+#     doing so the moment one is added.
+variable "instances" {
+  description = "Per-instance overrides keyed by instance number (\"1\" is the writer at creation). `instance_class` departs from the cluster default — `db.serverless` included — which is how a mixed cluster is expressed; `promotion_tier` (0-15) orders failover and, on a Serverless v2 instance, decides whether it tracks the writer's capacity (0-1) or its own workload (2-15)."
+  type = map(object({
+    instance_class = optional(string)
+    promotion_tier = optional(number)
+  }))
+  default  = {}
+  nullable = false
+
+  # An override on an instance the cluster does not have is silently ignored
+  # otherwise, which is the failure mode of every key-addressed map.
+  validation {
+    condition     = alltrue([for k, v in var.instances : contains([for i in range(1 + var.replicas) : tostring(i + 1)], k)])
+    error_message = "instances keys must name an instance the cluster has: \"1\" through \"1 + replicas\"."
+  }
+
+  validation {
+    condition     = alltrue([for c in values(var.instances)[*].instance_class : startswith(c, "db.") if c != null])
+    error_message = "instance_class must be an Aurora instance class such as db.r7g.large, or db.serverless."
+  }
+
+  validation {
+    condition     = alltrue([for t in values(var.instances)[*].promotion_tier : t >= 0 && t <= 15 if t != null])
+    error_message = "promotion_tier must be between 0 and 15."
+  }
+
+  # A Serverless v2 instance takes its capacity from the cluster's ACU range, so
+  # naming one where the cluster has no range builds an instance AWS rejects.
+  validation {
+    condition     = !contains(values(var.instances)[*].instance_class, "db.serverless") || var.size != null || var.scaling != null
+    error_message = "A db.serverless instance needs the cluster to have an ACU range: set size or scaling as well."
   }
 }
 
@@ -262,7 +323,7 @@ variable "apply_immediately" {
 }
 
 variable "replicas" {
-  description = "Number of reader instances alongside the writer. Serverless v2 readers share the cluster's ACU range (size/scaling) but each instance scales independently within it; readers also serve as failover targets."
+  description = "Number of reader instances alongside the writer. Serverless v2 readers share the cluster's ACU range (size/scaling) but each instance scales independently within it; readers also serve as failover targets. Instances are numbered \"1\" (the writer at creation) upwards — those keys are what `instances` addresses."
   type        = number
   default     = 0
   nullable    = false
