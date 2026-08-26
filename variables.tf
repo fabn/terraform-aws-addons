@@ -55,6 +55,7 @@ variable "addons" {
     engine                   = optional(string)
     maxmemory_policy         = optional(string)
     snapshot_retention_limit = optional(number)
+    slow_log                 = optional(bool)
   }))
   default = {}
 
@@ -84,8 +85,8 @@ variable "addons" {
   }
 
   validation {
-    condition     = alltrue([for k, spec in var.addons : (spec.engine == null && spec.maxmemory_policy == null && spec.snapshot_retention_limit == null) || k == "redis"])
-    error_message = "engine, maxmemory_policy and snapshot_retention_limit only apply to the redis addon."
+    condition     = alltrue([for k, spec in var.addons : (spec.engine == null && spec.maxmemory_policy == null && spec.snapshot_retention_limit == null && spec.slow_log == null) || k == "redis"])
+    error_message = "engine, maxmemory_policy, snapshot_retention_limit and slow_log only apply to the redis addon."
   }
 
   validation {

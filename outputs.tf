@@ -72,6 +72,8 @@ output "redis" {
     node_type         = module.redis[0].node_type
     replicas          = module.redis[0].replicas
 
+    slow_log_group_name = module.redis[0].slow_log_group_name
+
     maintenance_window = module.redis[0].maintenance_window
     snapshot_window    = module.redis[0].snapshot_window
     apply_immediately  = module.redis[0].apply_immediately

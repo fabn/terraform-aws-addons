@@ -59,6 +59,16 @@ output "snapshot_window" {
   value       = local.snapshot_window
 }
 
+output "log_delivery_configuration" {
+  description = "Log delivery configuration attached to the replication group (empty when `slow_log` is off)."
+  value       = local.log_delivery_configuration
+}
+
+output "slow_log_group_name" {
+  description = "CloudWatch log group receiving the slow log (null when `slow_log` is off)."
+  value       = try(module.redis.cloudwatch_log_groups["slow-log"].name, null)
+}
+
 output "apply_immediately" {
   description = "Whether modifications are applied right away or deferred to the maintenance window."
   value       = var.apply_immediately
