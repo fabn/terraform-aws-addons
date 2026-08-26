@@ -107,6 +107,14 @@ variable "parameters" {
   default = []
 }
 
+variable "slow_log" {
+  description = "Deliver the Redis slow log to CloudWatch Logs (JSON) in a log group named `/aws/elasticache/<name>`. Turn off to keep the addon within ElastiCache permissions, or where the log is not wanted."
+  type        = bool
+  default     = true
+  # Callers (the root wrapper) may forward null to mean "use the default".
+  nullable = false
+}
+
 variable "maintenance_window" {
   description = "Weekly UTC window when AWS applies maintenance (engine upgrades, patches), format `ddd:hh24:mi-ddd:hh24:mi` (min 60 minutes). Defaults to a Monday-night slot so upgrades land off-peak; set null to let AWS pick a random window."
   type        = string

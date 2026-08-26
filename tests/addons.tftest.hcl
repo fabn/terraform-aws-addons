@@ -198,6 +198,57 @@ run "rejects_engine_on_non_redis_addon" {
   expect_failures = [var.addons]
 }
 
+run "redis_slow_log_defaults_to_a_log_group_named_after_the_addon" {
+  command = apply
+
+  variables {
+    name       = "myapp"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    addons = {
+      redis = { size = "mini" }
+    }
+  }
+
+  assert {
+    condition     = output.redis.slow_log_group_name == "/aws/elasticache/myapp-redis"
+    error_message = "the wrapper should keep the slow log on, in a log group named after the addon instance"
+  }
+}
+
+run "redis_slow_log_can_be_turned_off_through_the_wrapper" {
+  command = apply
+
+  variables {
+    name       = "myapp"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    addons = {
+      redis = { size = "mini", slow_log = false }
+    }
+  }
+
+  assert {
+    condition     = output.redis.slow_log_group_name == null
+    error_message = "slow_log = false should reach the redis addon and leave no log group behind"
+  }
+}
+
+run "rejects_slow_log_on_non_redis_addon" {
+  command = plan
+
+  variables {
+    name       = "myapp"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    addons = {
+      memcached = { slow_log = false }
+    }
+  }
+
+  expect_failures = [var.addons]
+}
+
 run "rejects_unknown_redis_engine" {
   command = plan
 

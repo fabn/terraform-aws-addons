@@ -45,6 +45,13 @@ locals {
   # The snapshot window only makes sense when persistence is on; with
   # retention = 0 there are no snapshots to schedule.
   snapshot_window = var.snapshot_retention_limit > 0 ? var.snapshot_window : null
+
+  # Opting out means removing the entry, not disabling its log group: upstream
+  # falls back to the entry's `destination` when it creates no group, and that
+  # attribute is unset here — a delivery configuration pointing nowhere.
+  log_delivery_configuration = var.slow_log ? {
+    slow-log = { destination_type = "cloudwatch-logs", log_format = "json" }
+  } : {}
 }
 
 # https://github.com/terraform-aws-modules/terraform-aws-elasticache
@@ -76,6 +83,8 @@ module "redis" {
     [{ name = "maxmemory-policy", value = var.maxmemory_policy }],
     var.parameters,
   )
+
+  log_delivery_configuration = local.log_delivery_configuration
 
   # Persistence = daily RDB snapshots; 0 disables them entirely.
   snapshot_retention_limit = var.snapshot_retention_limit

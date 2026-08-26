@@ -218,6 +218,24 @@ enables automatic failover — a replica is promoted and the primary endpoint
 DNS follows, no sentinel-aware client needed. Add `multi_az_enabled = true`
 (submodule) for AZ-spread placement.
 
+#### Redis: slow log
+
+The slow log is on by default: ElastiCache delivers it as JSON to a
+CloudWatch log group named `/aws/elasticache/<name>`, which the addon
+creates. On a single-threaded engine that log is worth having — it catches
+the commands that block every other client, not merely slow ones.
+
+```hcl
+redis = {
+  size     = "mini"
+  slow_log = false # no delivery configuration, no log group
+}
+```
+
+Turning it off is the way out when the caller's IAM is scoped to ElastiCache
+alone: creating the log group needs CloudWatch Logs permissions, and without
+them the apply fails on `AccessDenied`.
+
 #### Redis: engine (redis vs valkey)
 
 ElastiCache offers [Valkey](https://valkey.io) — the Redis-compatible fork —

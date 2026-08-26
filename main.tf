@@ -95,6 +95,7 @@ module "redis" {
   replicas                 = local.redis.replicas
   maxmemory_policy         = local.redis.maxmemory_policy
   snapshot_retention_limit = local.redis.snapshot_retention_limit
+  slow_log                 = local.redis.slow_log
   snapshot_window          = var.backup_window
   maintenance_window       = var.maintenance_window
   apply_immediately        = var.apply_immediately

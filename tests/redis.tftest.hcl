@@ -202,6 +202,55 @@ run "cache_posture" {
   }
 }
 
+run "slow_log_goes_to_cloudwatch_by_default" {
+  command = apply
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name       = "myapp-redis"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.log_delivery_configuration["slow-log"].destination_type == "cloudwatch-logs"
+    error_message = "the slow log should be delivered to CloudWatch Logs by default"
+  }
+
+  assert {
+    condition     = output.slow_log_group_name == "/aws/elasticache/myapp-redis"
+    error_message = "the default slow log should land in a log group named after the replication group"
+  }
+}
+
+run "slow_log_opt_out" {
+  command = apply
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name       = "myapp-redis"
+    slow_log   = false
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = length(output.log_delivery_configuration) == 0
+    error_message = "opting out should leave the replication group with no log delivery configuration at all"
+  }
+
+  assert {
+    condition     = output.slow_log_group_name == null
+    error_message = "opting out should create no CloudWatch log group"
+  }
+}
+
 run "rejects_invalid_eviction_policy" {
   command = plan
 
