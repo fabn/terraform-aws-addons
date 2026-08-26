@@ -256,6 +256,48 @@ Switching the engine also switches the parameter group family default
 still overridable on the submodule (e.g. `engine = "valkey"` with
 `parameter_group_family = "valkey7"`).
 
+#### Redis: TLS and AUTH
+
+By default the addon runs without either: traffic stays inside the VPC and the
+security group is the whole access control. That is enough when the only
+clients on that network are the ones meant to reach it, and it stops being
+enough on a shared one — a security group admits a CIDR or a peer group, which
+there means every workload on it. A token narrows access to the clients
+actually given one.
+
+```hcl
+redis = {
+  size                       = "small"
+  transit_encryption_enabled = true
+  auth_token_enabled         = true # requires the line above
+}
+```
+
+AWS ties the two together: an auth token is accepted only on an encrypted
+connection, so `auth_token_enabled` on its own is rejected at plan time. The
+addon generates the token (`random_password`, 64 alphanumeric characters, so
+no percent-encoding is needed in a URL) and moves the connection string with
+it:
+
+| | `env` | `sensitive_env` |
+|---|---|---|
+| default | `REDIS_URL` (`redis://host:6379`) | — |
+| `transit_encryption_enabled` | `REDIS_URL` (`rediss://host:6379`) | — |
+| `+ auth_token_enabled` | — | `REDIS_URL` (`rediss://:token@host:6379`), `REDIS_AUTH_TOKEN` |
+
+`REDIS_URL` is published in one map or the other, never both: with a token it
+is a credential, and a key appearing in both would reach the workload as a
+ConfigMap and a Secret disagreeing about the same variable. Clients that read
+`REDIS_URL` (redis-rb, Sidekiq, …) need no other change — the scheme is what
+turns TLS on, and ElastiCache serves a certificate from a public CA, so there
+is no trust store to configure. A caller that has to park the token somewhere
+else instead (Secrets Manager, a Kubernetes Secret it builds itself) reads the
+`auth_token` output.
+
+⚠️ **Both are settled when the replication group is created.** Turning either
+on later replaces it, and whatever is in the cache goes with it — fine for a
+cache, a decision for a queue backend or a feature-flag store.
+
 #### Maintenance & backup windows
 
 By default AWS scatters each addon's maintenance across a random window. The
@@ -510,7 +552,7 @@ cluster), since the restore arguments themselves cannot be read back.
 |-----------|-----------|-----|---------------|
 | mysql | Aurora MySQL Serverless v2 ([terraform-aws-modules/rds-aurora](https://github.com/terraform-aws-modules/terraform-aws-rds-aurora)) | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_DATABASE` | `DATABASE_URL` (mysql2 scheme), `MYSQL_PASSWORD` |
 | postgres | Aurora PostgreSQL Serverless v2 ([terraform-aws-modules/rds-aurora](https://github.com/terraform-aws-modules/terraform-aws-rds-aurora)) | `PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE` | `DATABASE_URL` (postgresql scheme), `PGPASSWORD` |
-| redis | ElastiCache Redis / Valkey ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `REDIS_URL` | — |
+| redis | ElastiCache Redis / Valkey ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `REDIS_URL` | — (with `auth_token_enabled`: `REDIS_URL` moves here, alongside `REDIS_AUTH_TOKEN`) |
 | memcached | ElastiCache Memcached ([terraform-aws-modules/elasticache](https://github.com/terraform-aws-modules/terraform-aws-elasticache)) | `MEMCACHED_SERVERS` (comma-separated `host:port` list) | — |
 
 ## Examples

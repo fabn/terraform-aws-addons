@@ -1,17 +1,44 @@
 # Addon contract: `env` holds plaintext config vars, `sensitive_env` holds
 # credentials.
 
+# REDIS_URL travels in one map or the other, never both: with an auth token the
+# URL embeds a credential and belongs in `sensitive_env`, and a key published
+# twice would reach the consumer as a ConfigMap and a Secret disagreeing about
+# the same variable.
+#
+# tomap on every branch so each output keeps one type — a bare `{}` against a
+# populated object leaves Terraform unifying two different object types, which
+# surfaces as a type error in the caller rather than here.
 output "env" {
-  description = "Plaintext connection vars for Rails/Sidekiq. The scheme follows transit encryption (redis:// or rediss://)."
-  value = {
-    REDIS_URL = "${local.scheme}://${module.redis.replication_group_primary_endpoint_address}:6379"
-  }
+  description = "Plaintext connection vars for Rails/Sidekiq. The scheme follows transit encryption (redis:// or rediss://). Empty when an auth token is set: REDIS_URL then carries a credential and moves to sensitive_env."
+  value = var.auth_token_enabled ? tomap({}) : tomap({
+    REDIS_URL = local.url
+  })
 }
 
 output "sensitive_env" {
-  description = "Always empty (no AUTH inside the VPC — access is controlled by the security group); present to satisfy the addon contract."
+  description = "Credential vars. Empty unless auth_token_enabled is set, since a Redis reached over a security group alone has no credentials to publish."
   sensitive   = true
-  value       = {}
+  value = !var.auth_token_enabled ? tomap({}) : tomap({
+    REDIS_URL        = "${local.scheme}://:${local.auth_token}@${local.endpoint}"
+    REDIS_AUTH_TOKEN = local.auth_token
+  })
+}
+
+output "auth_token" {
+  description = "Generated AUTH token; null when auth_token_enabled is off. For a caller that has to park it somewhere its clients can reach (Secrets Manager, a Kubernetes Secret) rather than pass `sensitive_env` straight through."
+  sensitive   = true
+  value       = local.auth_token
+}
+
+output "transit_encryption_enabled" {
+  description = "Whether clients must connect over TLS (rediss://)."
+  value       = var.transit_encryption_enabled
+}
+
+output "auth_token_enabled" {
+  description = "Whether the replication group requires an AUTH token."
+  value       = var.auth_token_enabled
 }
 
 output "host" {

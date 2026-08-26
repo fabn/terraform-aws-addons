@@ -15,8 +15,8 @@ run "provisions_the_stack" {
   }
 
   assert {
-    condition     = startswith(output.env.REDIS_URL, "redis://") && endswith(output.env.REDIS_URL, ":6379")
-    error_message = "REDIS_URL should point at the ElastiCache primary endpoint"
+    condition     = !can(output.env.REDIS_URL) && startswith(nonsensitive(output.sensitive_env.REDIS_URL), "rediss://:") && endswith(nonsensitive(output.sensitive_env.REDIS_URL), ":6379")
+    error_message = "the authenticated redis addon should publish a credentialed rediss:// URL in sensitive_env alone"
   }
 
   assert {

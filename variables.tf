@@ -56,6 +56,10 @@ variable "addons" {
     maxmemory_policy         = optional(string)
     snapshot_retention_limit = optional(number)
     slow_log                 = optional(bool)
+    # redis only: TLS in transit, and the AUTH token that requires it. With a
+    # token REDIS_URL carries a credential, so it moves to `sensitive_env`.
+    transit_encryption_enabled = optional(bool)
+    auth_token_enabled         = optional(bool)
   }))
   default = {}
 
@@ -85,13 +89,18 @@ variable "addons" {
   }
 
   validation {
-    condition     = alltrue([for k, spec in var.addons : (spec.engine == null && spec.maxmemory_policy == null && spec.snapshot_retention_limit == null && spec.slow_log == null) || k == "redis"])
-    error_message = "engine, maxmemory_policy, snapshot_retention_limit and slow_log only apply to the redis addon."
+    condition     = alltrue([for k, spec in var.addons : (spec.engine == null && spec.maxmemory_policy == null && spec.snapshot_retention_limit == null && spec.slow_log == null && spec.transit_encryption_enabled == null && spec.auth_token_enabled == null) || k == "redis"])
+    error_message = "engine, maxmemory_policy, snapshot_retention_limit, slow_log, transit_encryption_enabled and auth_token_enabled only apply to the redis addon."
   }
 
   validation {
     condition     = alltrue([for k, spec in var.addons : contains(["redis", "valkey"], coalesce(spec.engine, "redis"))])
     error_message = "redis engine must be one of: redis, valkey."
+  }
+
+  validation {
+    condition     = alltrue([for k, spec in var.addons : !coalesce(spec.auth_token_enabled, false) || coalesce(spec.transit_encryption_enabled, false)])
+    error_message = "auth_token_enabled requires transit_encryption_enabled: ElastiCache accepts an auth token only on an encrypted connection."
   }
 }
 

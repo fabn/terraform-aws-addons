@@ -20,8 +20,15 @@ module "addons" {
   name = var.name
 
   addons = {
-    mysql     = { size = "mini" }
-    redis     = { size = "mini" }
+    mysql = { size = "mini" }
+    # TLS and AUTH on, because that is the half of the redis addon a mocked plan
+    # cannot check: the token's length and alphabet, and encryption in transit on
+    # the smallest node type, are only ever accepted or rejected by AWS itself.
+    redis = {
+      size                       = "mini"
+      transit_encryption_enabled = true
+      auth_token_enabled         = true
+    }
     memcached = { size = "mini" }
   }
 

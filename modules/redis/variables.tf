@@ -157,9 +157,31 @@ variable "multi_az_enabled" {
 }
 
 variable "transit_encryption_enabled" {
-  description = "Enable TLS in transit (clients must connect with rediss://). Off by default: traffic stays inside the VPC."
+  description = "Enable TLS in transit (clients must connect with rediss://). Off by default: traffic stays inside the VPC. ElastiCache serves a certificate from a public CA, so clients need no trust configuration."
   type        = bool
   default     = false
+  # Callers (the root wrapper) may forward null to mean "use the default".
+  nullable = false
+}
+
+# What a security group cannot express: it admits a CIDR or a peer group, which
+# on a shared network is every workload on it. A token narrows access to the
+# clients actually given one.
+#
+# Turning it on is a replacement, not a modification: ElastiCache accepts a
+# token only on an encrypted connection, and encryption in transit is settled
+# when the replication group is created. Whatever is in the cache is lost with
+# it.
+variable "auth_token_enabled" {
+  description = "Require an AUTH token. The addon generates one and publishes the credentialed `REDIS_URL` in `sensitive_env` instead of `env`. Requires transit_encryption_enabled."
+  type        = bool
+  default     = false
+  nullable    = false
+
+  validation {
+    condition     = !var.auth_token_enabled || var.transit_encryption_enabled
+    error_message = "auth_token_enabled requires transit_encryption_enabled: ElastiCache accepts an auth token only on an encrypted connection."
+  }
 }
 
 variable "vpc_id" {

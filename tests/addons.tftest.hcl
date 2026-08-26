@@ -5,7 +5,16 @@
 # env / sensitive_env merge every enabled addon's vars.
 
 mock_provider "aws" {}
-mock_provider "random" {}
+
+# A long enough mock password: the AWS provider validates the redis auth token's
+# length and alphabet (16-128 characters, no @, " or /) even when mocked.
+mock_provider "random" {
+  mock_resource "random_password" {
+    defaults = {
+      result = "mockauthtokenmockauthtokenmockauthtoken"
+    }
+  }
+}
 
 run "deploys_declared_addons_and_merges_env" {
   command = apply
@@ -243,6 +252,63 @@ run "rejects_slow_log_on_non_redis_addon" {
     subnet_ids = ["subnet-1", "subnet-2"]
     addons = {
       memcached = { slow_log = false }
+    }
+  }
+
+  expect_failures = [var.addons]
+}
+
+run "redis_auth_token_reaches_the_merged_contract" {
+  command = apply
+
+  variables {
+    name       = "myapp"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    addons = {
+      redis = {
+        size                       = "mini"
+        transit_encryption_enabled = true
+        auth_token_enabled         = true
+      }
+    }
+  }
+
+  assert {
+    condition     = output.redis.auth_token_enabled && output.redis.transit_encryption_enabled
+    error_message = "TLS and the auth token should pass through the wrapper to the redis addon"
+  }
+
+  assert {
+    condition     = !can(output.env.REDIS_URL) && startswith(nonsensitive(output.sensitive_env.REDIS_URL), "rediss://:")
+    error_message = "the merged contract should carry the credentialed REDIS_URL in sensitive_env alone"
+  }
+}
+
+run "rejects_an_auth_token_without_transit_encryption_through_the_wrapper" {
+  command = plan
+
+  variables {
+    name       = "myapp"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    addons = {
+      redis = { size = "mini", auth_token_enabled = true }
+    }
+  }
+
+  expect_failures = [var.addons]
+}
+
+run "rejects_transit_encryption_on_non_redis_addon" {
+  command = plan
+
+  variables {
+    name       = "myapp"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    addons = {
+      memcached = { transit_encryption_enabled = true }
     }
   }
 
