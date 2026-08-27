@@ -1,7 +1,7 @@
 # Redis addon: ElastiCache replication group via the official
 # terraform-aws-modules/elasticache module. Single node by default, dedicated
 # parameter group, no AUTH inside the VPC — access is controlled by the
-# security group.
+# security group, until `auth_token_enabled` asks for a credential as well.
 #
 # The defaults suit a queue backend (Sidekiq): noeviction + daily snapshot.
 # For a pure cache flip maxmemory_policy (e.g. allkeys-lru) and set
@@ -40,7 +40,14 @@ locals {
     "ingress_sg_${i}" => { description = "Redis from peer security group", referenced_security_group_id = sg } },
   )
 
-  scheme = var.transit_encryption_enabled ? "rediss" : "redis"
+  scheme   = var.transit_encryption_enabled ? "rediss" : "redis"
+  endpoint = "${module.redis.replication_group_primary_endpoint_address}:6379"
+
+  # Credential-free, so `env` stays plaintext config. The credentialed URL is
+  # composed in `sensitive_env`, which is where a token belongs.
+  url = "${local.scheme}://${local.endpoint}"
+
+  auth_token = one(random_password.auth_token[*].result)
 
   # The snapshot window only makes sense when persistence is on; with
   # retention = 0 there are no snapshots to schedule.
@@ -52,6 +59,20 @@ locals {
   log_delivery_configuration = var.slow_log ? {
     slow-log = { destination_type = "cloudwatch-logs", log_format = "json" }
   } : {}
+}
+
+# The AUTH token, when one is asked for. A security group admits a whole CIDR
+# or a whole peer group; a token is what narrows access to the clients actually
+# given it, and it is the only way to do so on a shared network.
+resource "random_password" "auth_token" {
+  count = var.auth_token_enabled ? 1 : 0
+
+  # ElastiCache accepts 16-128 printable characters, and only `!&#$^<>-` among
+  # the special ones. 32 alphanumeric characters clear that floor with room to
+  # spare and need no percent-encoding inside REDIS_URL — the same shape the SQL
+  # addons generate their passwords in.
+  length  = 32
+  special = false
 }
 
 # https://github.com/terraform-aws-modules/terraform-aws-elasticache
@@ -76,6 +97,16 @@ module "redis" {
   multi_az_enabled           = var.multi_az_enabled
   at_rest_encryption_enabled = true
   transit_encryption_enabled = var.transit_encryption_enabled
+  transit_encryption_mode    = var.transit_encryption_mode
+
+  # AWS ties the two together: an auth token is accepted only on an encrypted
+  # connection, which the variable's own validation enforces up front.
+  auth_token = local.auth_token
+  # ROTATE keeps the previous token valid alongside the new one, so clients that
+  # have not been restarted yet still connect; retiring it is a second apply
+  # with SET. Only ever reached by a token that changes — the generated one does
+  # not, unless it is replaced deliberately.
+  auth_token_update_strategy = var.auth_token_enabled ? "ROTATE" : null
 
   create_parameter_group = true
   parameter_group_family = local.parameter_group_family

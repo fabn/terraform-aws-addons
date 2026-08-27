@@ -72,6 +72,10 @@ output "redis" {
     node_type         = module.redis[0].node_type
     replicas          = module.redis[0].replicas
 
+    transit_encryption_enabled = module.redis[0].transit_encryption_enabled
+    transit_encryption_mode    = module.redis[0].transit_encryption_mode
+    auth_token_enabled         = module.redis[0].auth_token_enabled
+
     slow_log_group_name = module.redis[0].slow_log_group_name
 
     maintenance_window = module.redis[0].maintenance_window

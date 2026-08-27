@@ -100,6 +100,10 @@ module "redis" {
   maintenance_window       = var.maintenance_window
   apply_immediately        = var.apply_immediately
 
+  transit_encryption_enabled = local.redis.transit_encryption_enabled
+  transit_encryption_mode    = local.redis.transit_encryption_mode
+  auth_token_enabled         = local.redis.auth_token_enabled
+
   vpc_id                     = var.vpc_id
   subnet_ids                 = var.subnet_ids
   allowed_cidr_blocks        = var.allowed_cidr_blocks
