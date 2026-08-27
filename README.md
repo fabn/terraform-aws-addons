@@ -269,15 +269,19 @@ actually given one.
 redis = {
   size                       = "small"
   transit_encryption_enabled = true
-  auth_token_enabled         = true # requires the line above
+  auth_token_enabled         = true      # requires the line above
+  transit_encryption_mode    = "required" # optional: preferred | required
 }
 ```
 
-AWS ties the two together: an auth token is accepted only on an encrypted
-connection, so `auth_token_enabled` on its own is rejected at plan time. The
-addon generates the token (`random_password`, 64 alphanumeric characters, so
-no percent-encoding is needed in a URL) and moves the connection string with
-it:
+AWS ties the two together — [`AuthToken` can be specified only on replication
+groups where `TransitEncryptionEnabled` is
+`true`](https://docs.aws.amazon.com/AmazonElastiCache/latest/APIReference/API_CreateReplicationGroup.html)
+— so `auth_token_enabled` on its own is rejected at plan time, on the submodule
+and on the addons map alike. The addon generates the token (`random_password`,
+32 alphanumeric characters: comfortably above the 16-character floor AWS
+imposes, and no percent-encoding needed in a URL) and moves the connection
+string with it:
 
 | | `env` | `sensitive_env` |
 |---|---|---|
@@ -294,9 +298,20 @@ is no trust store to configure. A caller that has to park the token somewhere
 else instead (Secrets Manager, a Kubernetes Secret it builds itself) reads the
 `auth_token` output.
 
-⚠️ **Both are settled when the replication group is created.** Turning either
-on later replaces it, and whatever is in the cache goes with it — fine for a
-cache, a decision for a queue backend or a feature-flag store.
+`transit_encryption_mode` sets how strictly TLS is enforced while clients are
+still being moved over:
+
+| Mode | Accepts |
+|---|---|
+| `preferred` | encrypted **and** unencrypted connections |
+| `required` | encrypted connections only |
+| unset (default) | AWS chooses — `required` on a group created encrypted |
+
+That is the migration path for a group that has none: `preferred` first, so
+existing clients keep connecting while they are switched to `rediss://`, then
+`required`. AWS documents the mode change as leaving the replication group in
+place rather than replacing it. The token applies either way — `preferred`
+relaxes the transport, not the credential.
 
 #### Maintenance & backup windows
 

@@ -59,6 +59,7 @@ variable "addons" {
     # redis only: TLS in transit, and the AUTH token that requires it. With a
     # token REDIS_URL carries a credential, so it moves to `sensitive_env`.
     transit_encryption_enabled = optional(bool)
+    transit_encryption_mode    = optional(string)
     auth_token_enabled         = optional(bool)
   }))
   default = {}
@@ -89,8 +90,8 @@ variable "addons" {
   }
 
   validation {
-    condition     = alltrue([for k, spec in var.addons : (spec.engine == null && spec.maxmemory_policy == null && spec.snapshot_retention_limit == null && spec.slow_log == null && spec.transit_encryption_enabled == null && spec.auth_token_enabled == null) || k == "redis"])
-    error_message = "engine, maxmemory_policy, snapshot_retention_limit, slow_log, transit_encryption_enabled and auth_token_enabled only apply to the redis addon."
+    condition     = alltrue([for k, spec in var.addons : (spec.engine == null && spec.maxmemory_policy == null && spec.snapshot_retention_limit == null && spec.slow_log == null && spec.transit_encryption_enabled == null && spec.transit_encryption_mode == null && spec.auth_token_enabled == null) || k == "redis"])
+    error_message = "engine, maxmemory_policy, snapshot_retention_limit, slow_log, transit_encryption_enabled, transit_encryption_mode and auth_token_enabled only apply to the redis addon."
   }
 
   validation {
@@ -101,6 +102,18 @@ variable "addons" {
   validation {
     condition     = alltrue([for k, spec in var.addons : !coalesce(spec.auth_token_enabled, false) || coalesce(spec.transit_encryption_enabled, false)])
     error_message = "auth_token_enabled requires transit_encryption_enabled: ElastiCache accepts an auth token only on an encrypted connection."
+  }
+
+  validation {
+    # coalesce, not a bare reference: `||` evaluates both operands, and
+    # contains() rejects a null needle whatever the left side said.
+    condition     = alltrue([for k, spec in var.addons : contains(["preferred", "required"], coalesce(spec.transit_encryption_mode, "required"))])
+    error_message = "transit_encryption_mode must be one of: preferred, required."
+  }
+
+  validation {
+    condition     = alltrue([for k, spec in var.addons : spec.transit_encryption_mode == null || coalesce(spec.transit_encryption_enabled, false)])
+    error_message = "transit_encryption_mode requires transit_encryption_enabled: there is no TLS mode without TLS."
   }
 }
 

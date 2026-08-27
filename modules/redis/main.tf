@@ -67,9 +67,11 @@ locals {
 resource "random_password" "auth_token" {
   count = var.auth_token_enabled ? 1 : 0
 
-  # ElastiCache accepts 16-128 printable characters. No special ones, so the
-  # token needs no percent-encoding inside REDIS_URL.
-  length  = 64
+  # ElastiCache accepts 16-128 printable characters, and only `!&#$^<>-` among
+  # the special ones. 32 alphanumeric characters clear that floor with room to
+  # spare and need no percent-encoding inside REDIS_URL — the same shape the SQL
+  # addons generate their passwords in.
+  length  = 32
   special = false
 }
 
@@ -95,6 +97,7 @@ module "redis" {
   multi_az_enabled           = var.multi_az_enabled
   at_rest_encryption_enabled = true
   transit_encryption_enabled = var.transit_encryption_enabled
+  transit_encryption_mode    = var.transit_encryption_mode
 
   # AWS ties the two together: an auth token is accepted only on an encrypted
   # connection, which the variable's own validation enforces up front.

@@ -164,14 +164,36 @@ variable "transit_encryption_enabled" {
   nullable = false
 }
 
+# `preferred` is the migration setting: it accepts encrypted and unencrypted
+# connections at once, so clients can be moved over before the door closes.
+# `required` is the end state, and AWS reaches it in two steps — preferred
+# first, required after — neither of which replaces the replication group.
+# Left null, AWS picks required, which is the right end state for a group that
+# starts encrypted.
+variable "transit_encryption_mode" {
+  description = "TLS enforcement while clients migrate: `preferred` accepts both encrypted and unencrypted connections, `required` only encrypted ones. Null lets AWS choose (required). Reaching `required` from an unencrypted group is a two-step change: `preferred` first."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.transit_encryption_mode == null ? true : contains(["preferred", "required"], var.transit_encryption_mode)
+    error_message = "transit_encryption_mode must be one of: preferred, required (or null to let AWS choose)."
+  }
+
+  validation {
+    condition     = var.transit_encryption_mode == null || var.transit_encryption_enabled
+    error_message = "transit_encryption_mode requires transit_encryption_enabled: there is no TLS mode without TLS."
+  }
+}
+
 # What a security group cannot express: it admits a CIDR or a peer group, which
 # on a shared network is every workload on it. A token narrows access to the
 # clients actually given one.
 #
-# Turning it on is a replacement, not a modification: ElastiCache accepts a
-# token only on an encrypted connection, and encryption in transit is settled
-# when the replication group is created. Whatever is in the cache is lost with
-# it.
+# AWS accepts a token only on an encrypted connection, so a group that has no
+# TLS yet gains it first — through `transit_encryption_mode`, whose migration
+# path AWS documents as leaving the replication group in place.
 variable "auth_token_enabled" {
   description = "Require an AUTH token. The addon generates one and publishes the credentialed `REDIS_URL` in `sensitive_env` instead of `env`. Requires transit_encryption_enabled."
   type        = bool

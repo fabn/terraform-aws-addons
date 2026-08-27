@@ -269,14 +269,15 @@ run "redis_auth_token_reaches_the_merged_contract" {
       redis = {
         size                       = "mini"
         transit_encryption_enabled = true
+        transit_encryption_mode    = "required"
         auth_token_enabled         = true
       }
     }
   }
 
   assert {
-    condition     = output.redis.auth_token_enabled && output.redis.transit_encryption_enabled
-    error_message = "TLS and the auth token should pass through the wrapper to the redis addon"
+    condition     = output.redis.auth_token_enabled && output.redis.transit_encryption_enabled && output.redis.transit_encryption_mode == "required"
+    error_message = "TLS, its enforcement mode and the auth token should pass through the wrapper to the redis addon"
   }
 
   assert {
@@ -294,6 +295,21 @@ run "rejects_an_auth_token_without_transit_encryption_through_the_wrapper" {
     subnet_ids = ["subnet-1", "subnet-2"]
     addons = {
       redis = { size = "mini", auth_token_enabled = true }
+    }
+  }
+
+  expect_failures = [var.addons]
+}
+
+run "rejects_a_transit_encryption_mode_without_transit_encryption_through_the_wrapper" {
+  command = plan
+
+  variables {
+    name       = "myapp"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    addons = {
+      redis = { size = "mini", transit_encryption_mode = "required" }
     }
   }
 

@@ -73,6 +73,7 @@ output "redis" {
     replicas          = module.redis[0].replicas
 
     transit_encryption_enabled = module.redis[0].transit_encryption_enabled
+    transit_encryption_mode    = module.redis[0].transit_encryption_mode
     auth_token_enabled         = module.redis[0].auth_token_enabled
 
     slow_log_group_name = module.redis[0].slow_log_group_name

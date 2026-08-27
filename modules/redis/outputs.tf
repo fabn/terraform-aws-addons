@@ -36,6 +36,11 @@ output "transit_encryption_enabled" {
   value       = var.transit_encryption_enabled
 }
 
+output "transit_encryption_mode" {
+  description = "TLS enforcement mode (preferred or required); null when AWS chose it."
+  value       = var.transit_encryption_mode
+}
+
 output "auth_token_enabled" {
   description = "Whether the replication group requires an AUTH token."
   value       = var.auth_token_enabled

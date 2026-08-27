@@ -252,6 +252,90 @@ run "no_auth_token_leaves_the_url_in_env" {
   }
 }
 
+run "transit_encryption_mode_opens_the_migration_window" {
+  command = apply
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name                       = "myapp-redis"
+    transit_encryption_enabled = true
+    transit_encryption_mode    = "preferred"
+    auth_token_enabled         = true
+    vpc_id                     = "vpc-12345"
+    subnet_ids                 = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.transit_encryption_mode == "preferred"
+    error_message = "preferred should pass through, so clients can be migrated before TLS is enforced"
+  }
+
+  # The token is what the mode is a migration towards, and it applies either way:
+  # `preferred` relaxes the transport, not the credential.
+  assert {
+    condition     = startswith(nonsensitive(output.sensitive_env.REDIS_URL), "rediss://:")
+    error_message = "the credentialed URL should not depend on the enforcement mode"
+  }
+}
+
+run "mode_defaults_to_the_aws_choice" {
+  command = apply
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name                       = "myapp-redis"
+    transit_encryption_enabled = true
+    vpc_id                     = "vpc-12345"
+    subnet_ids                 = ["subnet-1", "subnet-2"]
+  }
+
+  assert {
+    condition     = output.transit_encryption_mode == null
+    error_message = "an unset mode should stay null rather than being decided here"
+  }
+}
+
+run "rejects_an_unknown_transit_encryption_mode" {
+  command = plan
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name                       = "myapp-redis"
+    transit_encryption_enabled = true
+    transit_encryption_mode    = "optional"
+    vpc_id                     = "vpc-12345"
+    subnet_ids                 = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.transit_encryption_mode]
+}
+
+run "rejects_a_transit_encryption_mode_without_transit_encryption" {
+  command = plan
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name                    = "myapp-redis"
+    transit_encryption_mode = "required"
+    vpc_id                  = "vpc-12345"
+    subnet_ids              = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.transit_encryption_mode]
+}
+
 run "rejects_an_auth_token_without_transit_encryption" {
   command = plan
 

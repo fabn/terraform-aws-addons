@@ -101,6 +101,7 @@ module "redis" {
   apply_immediately        = var.apply_immediately
 
   transit_encryption_enabled = local.redis.transit_encryption_enabled
+  transit_encryption_mode    = local.redis.transit_encryption_mode
   auth_token_enabled         = local.redis.auth_token_enabled
 
   vpc_id                     = var.vpc_id
