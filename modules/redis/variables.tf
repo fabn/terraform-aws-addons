@@ -204,6 +204,17 @@ variable "auth_token_enabled" {
     condition     = !var.auth_token_enabled || var.transit_encryption_enabled
     error_message = "auth_token_enabled requires transit_encryption_enabled: ElastiCache accepts an auth token only on an encrypted connection."
   }
+
+  # AWS rejects this pair on both paths, and neither error is easy to read from
+  # a plan that came back green. CreateReplicationGroup answers
+  # "Transit encryption preferred is not supported with access control enabled
+  # clusters"; ModifyReplicationGroup answers "The AUTH token modification is
+  # only supported when encryption-in-transit is enabled", which names TLS as
+  # if it were off. Both verified against the API.
+  validation {
+    condition     = !var.auth_token_enabled || var.transit_encryption_mode != "preferred"
+    error_message = "auth_token_enabled is incompatible with transit_encryption_mode = \"preferred\": ElastiCache accepts a token only where encryption is required. Reach `required` first, or leave the mode unset and let AWS choose it."
+  }
 }
 
 variable "vpc_id" {

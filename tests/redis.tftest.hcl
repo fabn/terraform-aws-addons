@@ -252,6 +252,9 @@ run "no_auth_token_leaves_the_url_in_env" {
   }
 }
 
+# No token here, deliberately: `preferred` is the transport half of the
+# migration and stands on its own. The pair is rejected outright — see
+# `rejects_an_auth_token_in_preferred_mode`.
 run "transit_encryption_mode_opens_the_migration_window" {
   command = apply
 
@@ -263,7 +266,6 @@ run "transit_encryption_mode_opens_the_migration_window" {
     name                       = "myapp-redis"
     transit_encryption_enabled = true
     transit_encryption_mode    = "preferred"
-    auth_token_enabled         = true
     vpc_id                     = "vpc-12345"
     subnet_ids                 = ["subnet-1", "subnet-2"]
   }
@@ -273,11 +275,9 @@ run "transit_encryption_mode_opens_the_migration_window" {
     error_message = "preferred should pass through, so clients can be migrated before TLS is enforced"
   }
 
-  # The token is what the mode is a migration towards, and it applies either way:
-  # `preferred` relaxes the transport, not the credential.
   assert {
-    condition     = startswith(nonsensitive(output.sensitive_env.REDIS_URL), "rediss://:")
-    error_message = "the credentialed URL should not depend on the enforcement mode"
+    condition     = !output.auth_token_enabled && can(output.env.REDIS_URL)
+    error_message = "without a token the URL stays plaintext config, whatever the enforcement mode"
   }
 }
 
@@ -348,6 +348,28 @@ run "rejects_an_auth_token_without_transit_encryption" {
     auth_token_enabled = true
     vpc_id             = "vpc-12345"
     subnet_ids         = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.auth_token_enabled]
+}
+
+# Caught here rather than at apply, where AWS reports it as
+# "Transit encryption preferred is not supported with access control enabled
+# clusters" when creating and as a claim that TLS is off when modifying.
+run "rejects_an_auth_token_in_preferred_mode" {
+  command = plan
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name                       = "myapp-redis"
+    transit_encryption_enabled = true
+    transit_encryption_mode    = "preferred"
+    auth_token_enabled         = true
+    vpc_id                     = "vpc-12345"
+    subnet_ids                 = ["subnet-1", "subnet-2"]
   }
 
   expect_failures = [var.auth_token_enabled]
