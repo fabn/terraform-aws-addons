@@ -252,10 +252,9 @@ run "no_auth_token_leaves_the_url_in_env" {
   }
 }
 
-# No token here, deliberately. `preferred` is the transport half of the
-# migration and stands on its own; pairing it with a token in a mocked plan
-# asserts a combination AWS rejects on a running group — see the e2e probe
-# `redis_preferred_auth`.
+# No token here, deliberately: `preferred` is the transport half of the
+# migration and stands on its own. The pair is rejected outright — see
+# `rejects_an_auth_token_in_preferred_mode`.
 run "transit_encryption_mode_opens_the_migration_window" {
   command = apply
 
@@ -349,6 +348,28 @@ run "rejects_an_auth_token_without_transit_encryption" {
     auth_token_enabled = true
     vpc_id             = "vpc-12345"
     subnet_ids         = ["subnet-1", "subnet-2"]
+  }
+
+  expect_failures = [var.auth_token_enabled]
+}
+
+# Caught here rather than at apply, where AWS reports it as
+# "Transit encryption preferred is not supported with access control enabled
+# clusters" when creating and as a claim that TLS is off when modifying.
+run "rejects_an_auth_token_in_preferred_mode" {
+  command = plan
+
+  module {
+    source = "./modules/redis"
+  }
+
+  variables {
+    name                       = "myapp-redis"
+    transit_encryption_enabled = true
+    transit_encryption_mode    = "preferred"
+    auth_token_enabled         = true
+    vpc_id                     = "vpc-12345"
+    subnet_ids                 = ["subnet-1", "subnet-2"]
   }
 
   expect_failures = [var.auth_token_enabled]

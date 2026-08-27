@@ -301,6 +301,26 @@ run "rejects_an_auth_token_without_transit_encryption_through_the_wrapper" {
   expect_failures = [var.addons]
 }
 
+run "rejects_an_auth_token_in_preferred_mode_through_the_wrapper" {
+  command = plan
+
+  variables {
+    name       = "myapp"
+    vpc_id     = "vpc-12345"
+    subnet_ids = ["subnet-1", "subnet-2"]
+    addons = {
+      redis = {
+        size                       = "mini"
+        transit_encryption_enabled = true
+        transit_encryption_mode    = "preferred"
+        auth_token_enabled         = true
+      }
+    }
+  }
+
+  expect_failures = [var.addons]
+}
+
 run "rejects_a_transit_encryption_mode_without_transit_encryption_through_the_wrapper" {
   command = plan
 

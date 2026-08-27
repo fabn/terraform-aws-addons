@@ -104,6 +104,13 @@ variable "addons" {
     error_message = "auth_token_enabled requires transit_encryption_enabled: ElastiCache accepts an auth token only on an encrypted connection."
   }
 
+  # See the same rule on modules/redis: AWS refuses a token alongside
+  # `preferred` when creating and when modifying alike.
+  validation {
+    condition     = alltrue([for k, spec in var.addons : !coalesce(spec.auth_token_enabled, false) || coalesce(spec.transit_encryption_mode, "required") != "preferred"])
+    error_message = "auth_token_enabled is incompatible with transit_encryption_mode = \"preferred\": ElastiCache accepts a token only where encryption is required."
+  }
+
   validation {
     # coalesce, not a bare reference: `||` evaluates both operands, and
     # contains() rejects a null needle whatever the left side said.
