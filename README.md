@@ -310,8 +310,25 @@ still being moved over:
 That is the migration path for a group that has none: `preferred` first, so
 existing clients keep connecting while they are switched to `rediss://`, then
 `required`. AWS documents the mode change as leaving the replication group in
-place rather than replacing it. The token applies either way — `preferred`
-relaxes the transport, not the credential.
+place rather than replacing it.
+
+The token does **not** fit in that window. AWS states the requirement as
+in-transit encryption being *enabled* — "AUTH can only be enabled for
+encryption in-transit enabled clusters" — but on a running group
+`ModifyReplicationGroup` refuses a token while the mode is still `preferred`:
+
+```
+InvalidParameterValue: The AUTH token modification is only supported when
+encryption-in-transit is enabled
+```
+
+So on a group being migrated the token arrives together with `required`, never
+before it. That is also the moment plaintext stops being accepted, so the
+clients need the credentialed URL by then rather than after.
+
+This restriction is undocumented and was observed on a modification. Whether a
+group created from scratch accepts `preferred` and a token in the same request
+is checked by the e2e probe `redis_preferred_auth`, not assumed here.
 
 #### Maintenance & backup windows
 

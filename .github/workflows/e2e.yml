@@ -13,6 +13,11 @@ name: E2E
 
 on:
   workflow_dispatch:
+    inputs:
+      filter:
+        description: 'Run only this test file, e.g. tests/redis_preferred_auth.tftest.hcl. Empty runs the whole suite.'
+        required: false
+        default: ''
   schedule:
     # Weekly, Monday 06:00 UTC.
     - cron: '0 6 * * 1'
@@ -49,4 +54,13 @@ jobs:
         run: terraform -chdir=e2e init
 
       - name: Run E2E Test
-        run: terraform -chdir=e2e test
+        env:
+          # Via the environment, not string interpolation: the input reaches the
+          # shell as data rather than as script.
+          FILTER: ${{ inputs.filter }}
+        run: |
+          if [ -n "$FILTER" ]; then
+            terraform -chdir=e2e test -filter="$FILTER"
+          else
+            terraform -chdir=e2e test
+          fi
