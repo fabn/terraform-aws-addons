@@ -1,0 +1,8 @@
+# actionlint does not know the `timezone` key GitHub added to `schedule` in
+# March 2026, and rejects the whole schedule element for it (1.7.7 through
+# 1.7.10 checked, with two different messages — hence the loose pattern).
+# Delete this file once a release parses the key.
+paths:
+  .github/workflows/e2e.yml:
+    ignore:
+      - '"schedule" section'
