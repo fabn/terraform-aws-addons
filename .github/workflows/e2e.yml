@@ -14,8 +14,12 @@ name: E2E
 on:
   workflow_dispatch:
   schedule:
-    # Weekly, Monday 06:00 UTC.
-    - cron: '0 6 * * 1'
+    # Monday 07:37 Rome. Off the top of the hour on purpose: that is where
+    # GitHub's scheduler is most congested, and every run of this workflow has
+    # started between 54 minutes and 7 hours late from there. `timezone` pins
+    # the local hour across DST instead of drifting with it.
+    - cron: '37 7 * * 1'
+      timezone: 'Europe/Rome'
 
 # One e2e run at a time: the harness provisions fixed-name resources.
 concurrency:
@@ -33,6 +37,11 @@ jobs:
     timeout-minutes: 60
     if: vars.AWS_E2E_ROLE_ARN != ''
 
+    env:
+      # The stack name (e2e/variables.tf) and the prefix of every resource the
+      # run creates, which is how the cleanup script finds them.
+      TF_VAR_name: aws-addons-e2e
+
     steps:
       - uses: actions/checkout@v7
 
@@ -45,8 +54,22 @@ jobs:
           role-to-assume: ${{ vars.AWS_E2E_ROLE_ARN }}
           aws-region: ${{ vars.AWS_E2E_REGION || 'us-east-1' }}
 
+      # Blocks until AWS reports the resources gone, so an apply cannot collide
+      # with a carcass a previous run left behind.
+      - name: Delete leftovers from an earlier run
+        env:
+          WAIT: '1'
+        run: .github/scripts/e2e-cleanup.sh
+
       - name: Terraform Init
         run: terraform -chdir=e2e init
 
       - name: Run E2E Test
         run: terraform -chdir=e2e test
+
+      # always() also runs on cancellation, which is the case this exists for:
+      # a job killed at its timeout never reaches terraform's own destroy, and
+      # its state dies with the runner.
+      - name: Delete anything this run left behind
+        if: always()
+        run: .github/scripts/e2e-cleanup.sh
